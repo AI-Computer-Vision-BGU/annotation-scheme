@@ -519,7 +519,7 @@ def sam_prompt_to_polygons(img_bgr, eps=1.5, min_area=10):
     """
     global sam_predictor, start_point, end_point, tool_hand_segmentation
 
-    sam_predictor.set_image(img_bgr[..., ::-1])          # BGR ➜ RGB
+    sam_predictor.set_image(img_bgr[..., ::-1])
     H, W = img_bgr.shape[:2]
     results = {}
 
@@ -1052,17 +1052,7 @@ def annotator(args, fixer=False):
         fix_annotations(args)
 
 
-"""
-@ TODO (TODAY)
- 1. Enhance the code by building menu so user can choose which one to use.
-   1.1. Fix the index of the annotations
-   1.2. make the user choose at each frame/video the annotation scheme (manually or semi)
- 2. Run the annotation on the new dataset
- 3. Make sure the script is explainable to students to run it.. 
-
-"""
-
-def _yes_no(prompt:str, default:bool=False) -> bool:
+def _yes_no(prompt, default=False):
     """
     Ask a yes/no question on stdin and return True/False.
     Empty input returns the default.
@@ -1071,9 +1061,9 @@ def _yes_no(prompt:str, default:bool=False) -> bool:
         ans = input(f"{prompt} [{'Y/n' if default else 'y/N'}]: ").strip().lower()
         if not ans:
             return default
-        if ans in {"y", "yes"}:
+        if ans in {"y", "yes", "Y", "Yes", "YES"}:
             return True
-        if ans in {"n", "no"}:
+        if ans in {"n", "no", "N", "No", "NO"}:
             return False
         print("  ➜ Please answer with y / n")
 
@@ -1104,30 +1094,31 @@ def ask_user_for_run_config():
         manually=False,
         database=False,
         annotate_by_points=False,
-        annotate_processed=False,
         file_data=None,
         fixer=False,
         images=None,
         tracker=None,
         coco_data=None,
         done_video_names=None,
+        save_visualization=False,
     )
 
     # 2) gather per-mode details ----------------------------------------------
     if mode == "1":                               # single video
-        args.video_path = utils.prompt_path("Full path to video: ")
+        args.video_path = utils.input_with_path_completion("Full path to video: ")
         args.manually = _yes_no("Annotate manually (skip SAM2)?", default=False)
         args.annotate_by_points = True#_yes_no("Draw points instead of bounding box?", default=False)
-        od = utils.prompt_path(f'Output directory (default: {args.output_dir}): ')
+        od = utils.input_with_path_completion(f'Output directory (default: {args.output_dir}): ')
         if od:
             args.output_dir = od
+        args.save_visualization = _yes_no("Save visualization results?", default=False)
 
     elif mode == "2":                             # Directory
         args.directory_path = utils.input_with_path_completion(f"Directory path (current dir is - {os.getcwd()}): ")
         while args.directory_path == '':
             args.directory_path = utils.input_with_path_completion(f"Directory path (current dir is - {os.getcwd()}): ")
-        args.annotate_processed = False
         args.manually = _yes_no("Annotate manually (skip SAM2)?", default=False)
+        args.save_visualization = _yes_no("Save visualization results?", default=False)
         args.annotate_by_points = True  #_yes_no("Draw points instead of bounding box??", default=False)
         args.new_shape = (640, 360)  # default shape for the video frames
         args.coco_data = 'tools_coco_format'
@@ -1165,14 +1156,14 @@ def ask_user_for_run_config():
 
 
     elif mode == "3":
-        args.annotate_processed = False
         args.fixer = True
-        coco_folder_path = input(f"The path to coco based format folder [ccontains images and annotations.json] getcwd: {os.getcwd()}: ")
+        coco_folder_path = utils.input_with_path_completion(f"The path to coco based format folder [ccontains images and annotations.json] getcwd: {os.getcwd()}: ")
         args.images_path = os.path.join(coco_folder_path, 'images')
         args.annotations_path = os.path.join(coco_folder_path, 'annotations.json')
         args.output_path = os.path.join(coco_folder_path, 'fix_annotations.json')
     os.makedirs(args.output_dir, exist_ok=True)
 
+    print("Arguments:")
     for k, v in vars(args).items():
         if k not in ['annotations']:
             print(f"  {k:20s}: {v}")

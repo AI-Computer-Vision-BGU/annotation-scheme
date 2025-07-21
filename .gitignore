@@ -1,5 +1,5 @@
-AnnotationScheme/*/
 segmmentanything/checkpoints/*
 AnnotationScheme/orginizator.py
+AnnotationScheme/tools_coco_format
 .DS_Store
 
