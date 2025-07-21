@@ -61,7 +61,7 @@ This launches an **interactive wizard** that lets you choose **one of three work
 </pre>
 * **Output**
   - result directory contains as follow:
-  - <pre>
+   <pre>
     res/
     ├── Images
     │ ├── I1.jpg
