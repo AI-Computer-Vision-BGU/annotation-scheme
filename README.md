@@ -17,6 +17,7 @@ First, clone the repo with its submodules
 ```bash
 git clone --recursive https://github.com/AI-Computer-Vision-BGU/Annotation-Scheme.git
 cd Annotation-Scheme
+```
 
 # 2 Core Python deps (GUI / YOLO / OpenCV / SAM2 helpers)
 pip install -r requirements.txt
