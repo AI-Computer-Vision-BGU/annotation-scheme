@@ -17,19 +17,21 @@ First, clone the repo with its submodules
 ```bash
 git clone --recursive https://github.com/AI-Computer-Vision-BGU/Annotation-Scheme.git
 cd Annotation-Scheme
-```
-
-# 2 Core Python deps (GUI / YOLO / OpenCV / SAM2 helpers)
 pip install -r requirements.txt
 
-# 3 Build SAM 2 in editable mode (needed if you’ll use the CUDA ops)
+```
+
+Then, install SAM requirements. More Info [Here](https://github.com/facebookresearch/sam2/blob/main/INSTALL.md)
+```bash
 cd segmentanything
 pip install -e .
 cd ..
+```
 
-# 4 (Temporary) install Meta’s original SAM package for the legacy helpers
+Make sure [segment-anything](https://github.com/facebookresearch/segment-anything?tab=readme-ov-file) is installed also:
+```bash
 pip install git+https://github.com/facebookresearch/segment-anything.git
-
+```
 
 
 Feel free to tweak wording or add optional environment-creation lines (`python -m venv`, `conda`, etc.) if your audience prefers those.
