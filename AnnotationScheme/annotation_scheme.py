@@ -27,16 +27,17 @@ from pathlib import Path
 import os
 import sys
 sys.path.append(os.getcwd())
-from AnnotationScheme.sam2_loader import SAM2_ROOT  # noqa: F401
+from AnnotationScheme.utils.sam2_loader import SAM2_ROOT  # noqa: F401
 from segmentanything.sam2.build_sam import (build_sam2_video_predictor)
 from segment_anything import sam_model_registry, SamPredictor
-from utils import *
-import utils
+from utils import utils
 import configs
 import json
 import warnings
 import  torch
 from types import SimpleNamespace
+import cv2
+import numpy as np
 warnings.filterwarnings("ignore")
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -664,14 +665,14 @@ def annotate_all_video_manually(v_path, curr_tool_output_path=None,
     os.makedirs(frame_paths, exist_ok=True)
 
     if frame_names is None:
-        video_to_frames(v_path, frame_paths)
+        utils.video_to_frames(v_path, frame_paths)
         frame_names = [
             p for p in os.listdir(frame_paths)
             if os.path.splitext(p)[-1] in [".jpg", ".jpeg", ".JPG", ".JPEG"]
         ]
         frame_names.sort(key=lambda p: int(os.path.splitext(p)[0]))
         # work only with 100 frames
-        frame_names = get_k_frames(frame_names)
+        frame_names = utils.get_k_frames(frame_names)
 
     saved_path = os.path.join(sub_root_saved_path, f'BBvis')
     os.makedirs(saved_path, exist_ok=True)
@@ -705,10 +706,10 @@ def annotate_all_video_manually(v_path, curr_tool_output_path=None,
         cv2.imwrite(os.path.join(saved_path, f'{frame_number:05d}.jpg'), image_copy)
         out.write(image_copy)
         if start_point is not None and end_point is not None:
-            tool_bbs[f'{sample_idx}'] = convert_bb_to_yolo_format([*start_point, *end_point], width, height)
+            tool_bbs[f'{sample_idx}'] = utils.convert_bb_to_yolo_format([*start_point, *end_point], width, height)
         else:
             # skipping the frame
-            if not prompt_question(True, query="Are you sure?"):
+            if not utils.prompt_question(True, query="Are you sure?"):
                 print(f'DELETING THIS BB {sample_idx}')
                 tool_bbs[f'{sample_idx}'] = [-1, -1, -1, -1]
 
@@ -754,7 +755,7 @@ def annotate_video_using_sam(args,
     os.makedirs(frame_paths, exist_ok=True)
 
     if frame_names is None:
-        with suppress_output():  # to suppress the output to stdout
+        with utils.suppress_output():  # to suppress the output to stdout
             utils.video_to_frames_slow(v_path, frame_paths)   # change this to video_to_frames
         frame_names = [
             p for p in os.listdir(frame_paths)
@@ -780,7 +781,7 @@ def annotate_video_using_sam(args,
     while i < total_frames:
         reset_globals()
         # Prepare the current window of frames
-        indices = find_range(i, frame_names, range_step=range_step)
+        indices = utils.find_range(i, frame_names, range_step=range_step)
         if debug:
             print(f' > Starting with {indices[0]} - {indices[-1]}/{len(indices)} frames from {len(frame_names)} frames')
 
@@ -811,7 +812,7 @@ def annotate_video_using_sam(args,
             cv2.waitKey(1)
             cv2.destroyAllWindows()
             # cv2.waitKey(1)
-            curr_frame_names = initial_working_dir(frame_paths, frame_names, current_working_file, indcies=indices)
+            curr_frame_names = utils.initial_working_dir(frame_paths, frame_names, current_working_file, indcies=indices)
 
             video_segments = second_stage(sam_video_predictor, current_working_file, 0)
             video_segments = {k + i: v for k, v in video_segments.items()}
@@ -824,7 +825,7 @@ def annotate_video_using_sam(args,
 
     cv2.destroyAllWindows()
     # SAVING SAM RESULTS
-    tool_bbs, tool_segs, hand_segs = visualzie_annotations(sub_root_saved_path,
+    tool_bbs, tool_segs, hand_segs = utils.visualzie_annotations(sub_root_saved_path,
                                                             success_indices,
                                                             combined_video_segments,
                                                             frame_paths,
@@ -854,182 +855,6 @@ def get_different_from_original(length_, k=100):
 
     return 0
 
-
-def annotate_preprocessed_data(rows, manually=False):
-    """
-    Annotate the missing bb from the 50 clusters frames
-    """
-    range_step = 10
-    for row_idx, row in enumerate(rows):
-        row_info = convert_DBrow_into_information(row, processed=True)
-        metadata = row_info["metadata"]
-        # print_row(row_info, place=f'{row_idx + 1}/{len(rows)}')
-
-        # cluster -> original
-        mapping_idx = row_info['mapping_idx']
-
-        # original-diff  -> bbs
-        tool_bbs = row_info['metadata']['tool_bbs']
-        # calculate the exactly starting index
-        length_ = row_info['length_']
-        diff = get_different_from_original(length_)
-
-        cluster_frames_with_no_bbs = []
-        negative_frames_with_no_bbs = []
-        save_results = False
-
-        if isinstance(tool_bbs, list):
-            # annotate the whole 50 frames
-            cluster_frames_with_no_bbs = mapping_idx.values()
-            # continue
-            print(f' NO BB DETECTED, need to annotate: {len(cluster_frames_with_no_bbs)} - {cluster_frames_with_no_bbs}')
-            tool_bbs = {}
-            # print(configs.END_LINE)
-
-        else:
-            # EXTRACT THE FRAMES WITH NO BB
-            total_with_bbs = 0
-            for counter, original_idx_from_cluster in enumerate(mapping_idx.values()):
-
-                far_from_bb = original_idx_from_cluster - diff
-
-                if far_from_bb < 0 and f'{far_from_bb}' not in tool_bbs:
-                    cluster_frames_with_no_bbs.append(original_idx_from_cluster)
-
-                elif f'{far_from_bb}' not in tool_bbs:
-                    cluster_frames_with_no_bbs.append(original_idx_from_cluster)
-
-                else:
-                    total_with_bbs += 1
-
-            print(f'cluster frames with bb: {total_with_bbs}')
-            print(f"cluster frames with no bb: {len(cluster_frames_with_no_bbs)}")
-
-        if(len(cluster_frames_with_no_bbs) == 0): continue
-
-
-        # if prompt_question(True, query="Manually or SAM"):
-
-        # prepare for running SAM
-        v_path = os.path.join(configs.DATASET_PATH_SSD, row_info["video_path"])
-        tmp = os.path.join(configs.DATASET_PATH_SSD, 'res_processed')
-        os.makedirs(tmp, exist_ok=True)
-        vid_cat = os.path.join(tmp, os.path.split(v_path)[-1].split('.')[0])
-        os.makedirs(vid_cat, exist_ok=True)
-        frame_paths = os.path.join(vid_cat, 'frames')
-        os.makedirs(frame_paths, exist_ok=True)
-
-
-        with suppress_output():  # to suppress the output to stdout
-            video_to_frames(v_path, frame_paths)
-        frame_names = [
-            p for p in os.listdir(frame_paths)
-            if os.path.splitext(p)[-1] in [".jpg", ".jpeg", ".JPG", ".JPEG"]
-        ]
-        frame_names.sort(key=lambda p: int(os.path.splitext(p)[0]))
-
-        cluster_frame_names = [frame_names[idx] for idx in cluster_frames_with_no_bbs]
-        frame_names_mapping = {f'{i}': idx - diff for i, idx in enumerate(cluster_frames_with_no_bbs)}
-
-        if len(cluster_frame_names) > 10 and not manually:
-            sam_bb_results, _ = annotate_video_using_sam(row_info["video_path"], vid_cat,
-                                                         extract_tool=True,
-                                                         frame_names=cluster_frame_names,
-                                                         frame_paths=frame_paths,
-                                                         range_step=range_step,
-                                                         preview_before_save=True)
-
-            for idx, bb in sam_bb_results.items():
-                tool_bbs[f'{frame_names_mapping[idx]}'] = bb
-                save_results = True
-
-        elif len(cluster_frames_with_no_bbs) > 0 and manually:
-            # manually annotate the frames
-            manually_tools_results, _ = annotate_all_video_manually(row_info["video_path"], vid_cat,
-                                                                    frame_names=cluster_frame_names,
-                                                                    frame_paths=frame_paths)
-
-            for idx, bb in manually_tools_results.items():
-                tool_bbs[f'{frame_names_mapping[idx]}'] = bb
-                save_results = True
-            print(configs.END_LINE)
-
-
-        if save_results:
-            metadata["tool_bbs"] = tool_bbs
-            # update the database
-            print(f' > Updating metadata Total bbs: {len(tool_bbs)}')
-            update_metadata(
-                db_path=configs.PREPROCESSED_DB,
-                table_name=configs.DB_TABLE_NAME,
-                new_value=json.dumps(metadata),
-                condition_column="id",
-                condition_value=row_info["id"]
-            )
-
-        print(configs.END_LINE)
-
-
-def annotate_via(rows, tracker, manually=False):
-    """
-
-    @param rows:
-    @param tracker:
-    @param manually:
-    @return:
-    """
-    # skip_for_now = get_tacker_paths(tracker)
-
-    for row_idx, row in enumerate(rows):  # temporarily, skip first 40 (for screwdriver)
-        row_info = convert_DBrow_into_information(row)
-        metadata = row_info['metadata']
-        tool_category = row_info['category']
-        curr_tool_output_path = os.path.join(args.output_dir, tool_category)
-        os.makedirs(curr_tool_output_path, exist_ok=True)
-
-        v_name = os.path.split(row_info['video_path'])[-1].split('.')[0]
-        if not os.path.exists(os.path.join(configs.DATASET_PATH_SSD, 'data_150', tool_category, v_name)):
-            print(f' SKIPPING {tool_category}/{v_name}')
-            continue
-
-        # if len(metadata["tool_bbs"]) >= min(row_info["length_"] - 1, 50):  # or row_info['video_path'] in skip_for_now:
-        if isinstance(metadata["tool_bbs"], dict):
-            continue
-        print(f'Video: {tool_category}/{os.path.split(row_info["video_path"])[-1]} - {row_idx}/{len(rows)}\t'
-              f'Tool: {row_info["tool"]}\t'
-              f'frames: {row_info["length_"]}\t'
-              f'res: {row_info["resolution"]}\t'
-              f'Total bbs: {len(metadata["tool_bbs"])}\t'
-              f'Link: {row_info["video_link"]}')
-
-        # AnnotationScheme Over a video
-        v_path = os.path.join(configs.DATASET_PATH_SSD, row_info["video_path"])
-
-        # if v_path in skip_for_now:
-        #     continue
-
-        if manually:
-            tool_bbs, _ = annotate_all_video_manually(v_path, curr_tool_output_path, preview_before_save=True)
-        else:
-            tool_bbs, _ = annotate_video_using_sam(v_path, curr_tool_output_path, preview_before_save=True)
-
-        if len(tool_bbs) == 0:
-            # add it to later as manually
-            tracker[row_info['video_path']] = 'manual'
-            continue
-
-        metadata["tool_bbs"] = tool_bbs
-        # update the database
-        print(f' > Updating metadata Total bbs: {len(tool_bbs)}')
-        update_metadata(
-            db_path=configs.DATABASE_PATH_SDD,
-            table_name=configs.DB_TABLE_NAME,
-            new_value=json.dumps(metadata),
-            condition_column="id",
-            condition_value=row_info["id"]
-        )
-        write_to_json(tracker_path, tracker)
-        print(f'=============================================')
 
 ################################################################################################################ START Fix COCO
 
@@ -1182,7 +1007,7 @@ def annotator(args, fixer=False):
     :return:
     """
     global segment_by_points
-    tracker = read_json(tracker_path)
+    tracker = utils.read_json(tracker_path)
     args.tracker = tracker
 
     if args.video_path is not None:     # Single video
@@ -1196,44 +1021,6 @@ def annotator(args, fixer=False):
 
         # print(f'tool_bbs: {tool_bbs}\n\nhand_segmentations: {hands_segmentations}')
 
-    elif args.database:                             # Annotate from database
-        segment_by_points = args.annotate_by_points
-        for tool_category in configs.TOOL_CATEGORIES:
-            rows = fetch_rows_by_category(configs.DATABASE_PATH_SDD,
-                                          configs.DB_TABLE_NAME,
-                                          category_name=tool_category)
-            # for results saving:
-            annotate_via(rows, tracker, manually=args.manually)
-
-    elif args.annotate_processed:     # Annotate Processed
-        list_of_cat = [os.path.join(configs.DATASET_PATH_SSD, 'processed_dataset_v1', path) for path in os.listdir(os.path.join(configs.DATASET_PATH_SSD, 'processed_dataset_v1')) if path in configs.TOOL_CATEGORIES]
-
-        for cat_path in list_of_cat:
-            cat = os.path.split(cat_path)[-1]
-            video_paths = [os.path.join('MaintenanceDatasets/MAS', cat, f'{v_name}.MP4') for v_name in os.listdir(cat_path) if '.DS' not in v_name]
-            rows = [fetch_row_by_key(db_path=configs.PREPROCESSED_DB,
-                                     table_name=configs.DB_TABLE_NAME,
-                                     identifier='video_path',
-                                     key=video_path) for video_path in video_paths]
-            # print(f"-------------Num of frames without bbs in {cat}:-----------------------")
-            annotate_preprocessed_data(rows, manually=args.manually)
-
-    elif args.file_data:
-        # read ids from json:
-        with open(args.file_data, 'r') as file_:
-            data = json.load(file_)
-        ids_with_less_than_50_bbs = data['Ids less than 50BB']
-        rows = [fetch_row_by_key(db_path=configs.DATABASE_PATH_SDD,
-                                 table_name=configs.DB_TABLE_NAME,
-                                 identifier='id',
-                                 key=id_) for id_ in ids_with_less_than_50_bbs]
-        # else:  # use tracker.json
-        #     rows = [fetch_row_by_key(db_path=configs.DATABASE_PATH_SDD,
-        #                          table_name=configs.DB_TABLE_NAME,
-        #                          identifier='video_path',
-        #                          key=path) for path, _ in tracker.items()]
-
-        annotate_via(rows, tracker, manually=args.manually)
 
     elif args.directory_path:
         tool_categories = [tool_cat for tool_cat in os.listdir(args.directory_path) if '.DS_' not in tool_cat ]#and tool_cat in configs.CATEGORIES]
@@ -1301,16 +1088,13 @@ def ask_user_for_run_config():
     # 1) choose high-level mode ------------------------------------------------
     print("Choose what to annotate:")
     print("  1) A single video file")
-    print("  2) All videos listed in the database")
-    print("  3) Videos referenced in a JSON file (ids / paths)")
-    print("  4) Videos with missing BBs from database")
-    print("  5) Directory of videos")
-    print("  6) Fix Annotations")
+    print("  2) Directory of videos")
+    print("  3) Fix Annotations")
 
 
     mode = None
-    while mode not in {"1", "2", "3", "4", "5", "6"}:
-        mode = input("Mode [1/2/3/4/5/6]: ").strip()
+    while mode not in {"1", "2", "3"}:
+        mode = input("Mode [1/2/3]: ").strip()
 
     # initialise defaults --------------------------
     args = SimpleNamespace(
@@ -1338,22 +1122,7 @@ def ask_user_for_run_config():
         if od:
             args.output_dir = od
 
-    elif mode == "2":                             # whole DB
-        args.database = True
-        args.manually = _yes_no("Annotate manually (skip SAM2)?", default=False)
-        args.annotate_by_points = _yes_no("Draw points instead of bounding box?", default=False)
-
-    elif mode == "3":                             # list from JSON
-        args.file_data = utils.prompt_path("Path to JSON file containing video ids/paths: ")
-        args.manually = _yes_no("Annotate manually (skip SAM2)?", default=False)
-        args.annotate_by_points = _yes_no("Draw points instead of bounding box??", default=False)
-
-    elif mode == "4":                             # processed dataset
-        args.annotate_processed = True
-        args.manually = _yes_no("Annotate manually (skip SAM2)?", default=False)
-        args.annotate_by_points = _yes_no("Draw points instead of bounding box??", default=False)
-
-    elif mode == "5":                             # Directory
+    elif mode == "2":                             # Directory
         args.directory_path = utils.input_with_path_completion(f"Directory path (current dir is - {os.getcwd()}): ")
         while args.directory_path == '':
             args.directory_path = utils.input_with_path_completion(f"Directory path (current dir is - {os.getcwd()}): ")
@@ -1395,7 +1164,7 @@ def ask_user_for_run_config():
         args.id_category_mapping = {cat['id']: cat['name'].lower() for cat in args.annotations['categories']}
 
 
-    elif mode == "6":
+    elif mode == "3":
         args.annotate_processed = False
         args.fixer = True
         coco_folder_path = input(f"The path to coco based format folder [ccontains images and annotations.json] getcwd: {os.getcwd()}: ")
