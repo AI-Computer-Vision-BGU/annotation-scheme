@@ -49,7 +49,7 @@ This launches an **interactive wizard** that lets you choose **one of three work
   - Optional saved overlayed visualization 
 ---
 
-#### 2&nbsp;·&nbsp;Annotate an *entire directory* of class-organised videos\
+#### 2&nbsp;·&nbsp;Annotate an *entire directory* of class-organised videos
 * Input (root path)
 <pre> root/
   │ 
@@ -59,6 +59,16 @@ This launches an **interactive wizard** that lets you choose **one of three work
   └── object2/ 
   └── … 
 </pre>
+* **Output**
+  - result directory contains as follow:
+  - <pre>
+    res/
+    ├── Images
+    │ ├── I1.jpg
+    │ └── … 
+    └── Annotations.json
+
+  </pre>
 
 
 ## Stat
