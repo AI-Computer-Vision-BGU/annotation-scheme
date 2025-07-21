@@ -15,6 +15,7 @@ it works as follows:
   13/07/2025 -- added annotations for hand segmentations by asking user in real-time to choose points for hands or tool (or both)
 
 # TODO:
+    4- add exit button to the GUI to exit the program (save the changes...)
 
 SEARCH WORDS IN THIS FILE FOR EDITTING/FIXING:
 1. MOVE
@@ -26,6 +27,7 @@ from pathlib import Path
 import os
 import sys
 sys.path.append(os.getcwd())
+from AnnotationScheme.sam2_loader import SAM2_ROOT  # noqa: F401
 from segmentanything.sam2.build_sam import (build_sam2_video_predictor)
 from segment_anything import sam_model_registry, SamPredictor
 from utils import *
@@ -36,13 +38,12 @@ import warnings
 import  torch
 from types import SimpleNamespace
 warnings.filterwarnings("ignore")
-# from TOOLDETECTION.ultralytics.ultralytics import YOLO
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print(f'Device: {device}')
 
 # INITIALIZE MODELS AND GLOBAL VARIABLES
-sam_video_predictor = build_sam2_video_predictor(configs.model_cfg, configs.sam2_checkpoint_video)
+sam_video_predictor = build_sam2_video_predictor(configs.model_cfg, configs.sam2_checkpoint_video, device=device)
 sam_model = sam_model_registry["vit_h"](checkpoint=configs.sam_checkpoint_image).to(device)
 sam_predictor = SamPredictor(sam_model)
 yolo_failed = False
@@ -327,11 +328,11 @@ def run_preview(preview_path, tool_bbs, tool_segs=None, hand_segs=None, new_shap
                     bb = utils.rescale_bbox_x1y1wh(tool_bbs[f"{frame_idx}"][0], (orig_w, orig_h), new_shape)  # assuming always one bb in each frame..
                     # print(f" Accepted BB for frame {frame_idx}: img_id: {img_id}- annID: {ann_id} --> {frame_name}")
                     images.append({
-                                    "id": img_id,
-                                    "file_name": frame_name,
-                                    "width": new_shape[0],
-                                    "height": new_shape[1]
-                                })
+                        "id": img_id,
+                        "file_name": frame_name,
+                        "width": new_shape[0],
+                        "height": new_shape[1]
+                    })
                     annotations.append({
                         "id": ann_id,
                         "image_id": img_id,
@@ -363,8 +364,9 @@ def run_preview(preview_path, tool_bbs, tool_segs=None, hand_segs=None, new_shap
                     img_id_indicator = True
                     
                 else:
-                    # allow the user to see that this bb is indeed -1
-                    print(f" [!] Discard BB for frame {frame_idx}: {tool_bbs[f'{frame_idx}']}")
+                    if not img_saved:
+                        # allow the user to see that this bb is indeed -1
+                        print(f" [!] Discard BB for frame {frame_idx}: {tool_bbs[f'{frame_idx}']}")
                 
                 if not img_id_indicator and img_saved:
                     img_id += 1
