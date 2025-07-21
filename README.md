@@ -50,6 +50,10 @@ This launches an **interactive wizard** that lets you choose **one of three work
 ---
 
 #### 2&nbsp;·&nbsp;Annotate an *entire directory* of class-organised videos  
-<pre> dataset_root/ │ ├── object1/ │ ├── clip_001.mp4 │ └── … └── object2/ └── … </pre>
+<pre> dataset_root/
+  │ 
+  ├── object1/ 
+  │ ├── clip_001.mp4 
+  │ └── … └── object2/ └── … </pre>
 
 
