@@ -36,3 +36,19 @@ pip install git+https://github.com/facebookresearch/segment-anything.git
 
 ## Getting Started
 
+## What this annotation scheme gives you  🔍🎞️
+
+Running `python AnnotationScheme/annotation_scheme.py` launches an **interactive wizard** (`ask_user_for_run_config()` in the code) that lets you choose **one of three workflows**:
+
+### 1&nbsp;·&nbsp;Annotate a *single* video  
+* **Input** any `.mp4 / .mov` file  
+* **Output**  
+  - **Tool bounding-box** per sampled frame (YOLO txt format, `[x_c y_c w h]` normalised)  
+  - Optional **tool & hand polygons** (COCO JSON)  
+  - Optional preview video with BB overlays  
+* **How** YOLOv8 proposes a BB → you confirm / correct → SAM 2 propagates through the clip.
+
+---
+
+### 2&nbsp;·&nbsp;Annotate an *entire directory* of class-organised videos  
+
