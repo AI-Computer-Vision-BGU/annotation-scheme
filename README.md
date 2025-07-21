@@ -54,9 +54,19 @@ This launches an **interactive wizard** that lets you choose **one of three work
   │ 
   ├── object1/ 
   │ ├── clip_001.mp4 
-  │ 
-  └── … 
+  │ └── … 
   └── object2/ 
-  └── … </pre>
+  └── … 
+</pre>
 
+
+## Stat
+```bash
+TODO
+```
+
+## Citations
+```bash
+TODO  
+```
 
