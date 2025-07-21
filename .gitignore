@@ -1,0 +1,4 @@
+# This is a sample .gitignore file for a Python project
+# It ignores common Python artifacts, virtual environments, and IDE files.
+AnnotationScheme/*/
+
