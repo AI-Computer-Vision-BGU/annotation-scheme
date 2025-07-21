@@ -35,12 +35,13 @@ pip install git+https://github.com/facebookresearch/segment-anything.git
 
 
 ## Getting Started
+To run the script:
+```bash
+python AnnotationScheme/annotation_scheme.py
+```
+This launches an **interactive wizard** that lets you choose **one of three workflows**:
 
-## What this annotation scheme gives you  🔍🎞️
-
-Running `python AnnotationScheme/annotation_scheme.py` launches an **interactive wizard** (`ask_user_for_run_config()` in the code) that lets you choose **one of three workflows**:
-
-### 1&nbsp;·&nbsp;Annotate a *single* video  
+#### 1&nbsp;·&nbsp;Annotate a *single* video  
 * **Input** any `.mp4 / .mov` file  
 * **Output**  
   - **Tool bounding-box** per sampled frame (YOLO txt format, `[x_c y_c w h]` normalised)  
@@ -50,5 +51,5 @@ Running `python AnnotationScheme/annotation_scheme.py` launches an **interactive
 
 ---
 
-### 2&nbsp;·&nbsp;Annotate an *entire directory* of class-organised videos  
+#### 2&nbsp;·&nbsp;Annotate an *entire directory* of class-organised videos  
 
