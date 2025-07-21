@@ -11,7 +11,6 @@ This repo contains the semi-automatic video annotation pipeline used in our [Mai
 
 ## Installation
 
-Tested on Python 3.9 + PyTorch 2.1, Ubuntu 22.04 / macOS 14, CUDA 11.8.
 
 First, clone the repo with its submodules
 ```bash
