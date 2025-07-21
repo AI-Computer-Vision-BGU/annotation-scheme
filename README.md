@@ -24,6 +24,7 @@ Then, install SAM requirements. More Info [Here](https://github.com/facebookrese
 ```bash
 cd segmentanything
 pip install -e .
+.checkpoints/download_ckpts.sh    # download the weights for the model
 cd ..
 ```
 
