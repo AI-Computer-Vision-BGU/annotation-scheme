@@ -34,6 +34,3 @@ pip install git+https://github.com/facebookresearch/segment-anything.git
 ```
 
 
-Feel free to tweak wording or add optional environment-creation lines (`python -m venv`, `conda`, etc.) if your audience prefers those.
-::contentReference[oaicite:0]{index=0}
-
