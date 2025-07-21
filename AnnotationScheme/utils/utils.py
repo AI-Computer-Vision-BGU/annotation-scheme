@@ -85,15 +85,10 @@ def show_and_destroy_yolo_res(frame_image, box, indices):
     cv2.destroyAllWindows()
 
 
-def visualzie_annotations(sub_root_saved_path,
-                          success_indices,
-                          combined_video_segments,
-                          frame_paths,
-                          frame_names,
-                          vid_name,
-                          args,
-                          fps=30,
-                          v_path=None):
+def extract_annotations(success_indices,
+                        combined_video_segments,
+                        format='coco',  # 'coco' or 'yolo'
+                          ):
     """
     EDIT -- No need to save each image with bb, only extract bbs as dictionary
     """
@@ -110,20 +105,20 @@ def visualzie_annotations(sub_root_saved_path,
                 out_mask = np.stack((out_mask, out_mask, 255 * out_mask), axis=-1)
                 if out_obj_id == 10:  # tool
                     bb_coco, bb_yolo, segs = draw_bb(out_mask, draw=True, mode='tool')
-                    curr_frame_path = os.path.join(frame_paths, frame_names[out_frame_idx])
-                    tool_bbs[f'{out_frame_idx}'].append(bb_coco)
+                    if format == 'coco':
+                        tool_bbs[f'{out_frame_idx}'].append(bb_coco)
+                    elif format == 'yolo':
+                        tool_bbs[f'{out_frame_idx}'].append(bb_yolo)
                     tool_segs[f'{out_frame_idx}'] = segs
 
                 elif out_obj_id == 20:  # hand
                     _, _, segs = draw_bb(out_mask, draw=True, mode='hands')
-                    curr_frame_path = os.path.join(frame_paths, frame_names[out_frame_idx])
                     hand_segs[f'{out_frame_idx}'].append(segs)
 
         except Exception as e:
             print(f' > utils/visualzie_annotations() - frame: {out_frame_idx} Error: {e}')
             continue
 
-    # out.release()
     return tool_bbs, tool_segs, hand_segs
 
 
@@ -334,7 +329,7 @@ def draw_bb(out_mask, draw=True, shape=None, mode='tool'):
     return out_mask, None, None
 
 
-def ask_class(img, max_id, prompt_win=None, x_offset=20):
+def ask_class(img, max_id, prompt_win=None, x_offset=20, selected_class=-1):
     """
     Repeatedly reads keystrokes in a cv2 window until the user presses
     Enter/Space, then returns the integer class-id.
@@ -360,6 +355,9 @@ def ask_class(img, max_id, prompt_win=None, x_offset=20):
         # ---------- abort --------------------------------------------
         if key in (27, ord('q')):    # Esc or 'q'
             return -1
+
+        if key in (ord('n'), ord('N')) and selected_class != -1:
+            return selected_class
 
         # ---------- accumulate digits --------------------------------
         if ord('0') <= key <= ord('9'):

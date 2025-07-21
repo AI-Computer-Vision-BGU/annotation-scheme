@@ -193,7 +193,7 @@ def reset_globals():
     }
 
 
-def run_preview(preview_path, tool_bbs, tool_segs=None, hand_segs=None, new_shape=(640, 360), milli=0):
+def run_preview(preview_path, tool_bbs, tool_segs=None, hand_segs=None, new_shape=(640, 360), milli=0, save_vis=False):
     """
     Run the result of the bounding boxes with a choice to edit
     :param preview_path: path to MP4 bb r esult
@@ -210,6 +210,11 @@ def run_preview(preview_path, tool_bbs, tool_segs=None, hand_segs=None, new_shap
     selected_class = -1
     total_frames = len(os.listdir(os.path.join(preview_path, 'frames')))
     winname = 'Preview' #f'{frame_idx}'  winname here so the window does not close and open after each frame..
+    if save_vis:
+        if not os.path.exists(os.path.join(preview_path, 'vis')):
+            os.makedirs(os.path.join(preview_path, 'vis'))
+
+        winname = f'Preview - {os.path.split(preview_path)[-1]}'
     while frame_idx < total_frames:
         orig_frame_path = os.path.join(preview_path, 'frames', f'{frame_idx:05d}.jpg')
         orig_frame_img = cv2.imread(orig_frame_path)
@@ -234,6 +239,7 @@ def run_preview(preview_path, tool_bbs, tool_segs=None, hand_segs=None, new_shap
         if f'{frame_idx}' in hand_segs and hand_segs[f'{frame_idx}']:
             utils.safe_draw_polygons(orig_frame_img, hand_segs[f'{frame_idx}'], color=(0, 0, 255), alpha=0.4)
 
+        vis_image = orig_frame_img.copy()
         # --------------------------------------------------  instructions
         instr = "[a/Enter] Accept   [e] Edit BB   [n] Change Class   [q] Quit BB   [x] Quit Program"
         cv2.putText(orig_frame_img, instr, (configs.x_offset, 30), cv2.FONT_HERSHEY_SIMPLEX,
@@ -244,7 +250,7 @@ def run_preview(preview_path, tool_bbs, tool_segs=None, hand_segs=None, new_shap
         utils.place_window(winname, winnsize=configs.winnsize)  # Place the window at the top left corner
         cv2.imshow(winname, orig_frame_img)
 
-        key = cv2.waitKey(0) & 0xFF  # wait for *one* key
+        key = cv2.waitKey(0) & 0xFF  
         if key in (ord('q'), 27): 
             # TODO -- also, save here the annotation before existing.
             cv2.destroyAllWindows()
@@ -277,18 +283,7 @@ def run_preview(preview_path, tool_bbs, tool_segs=None, hand_segs=None, new_shap
                 print(f" [*] Skipped frame {frame_idx}")
                 tool_bbs[f"{frame_idx}"] = [[]]  # mark skipped
                 tool_segs[f"{frame_idx}"] = [[]]  # mark skipped
-            # if start_point and end_point:
-            #     x1, y1 = start_point
-            #     x2, y2 = end_point
-            #     new_w, new_h = abs(x2 - x1), abs(y2 - y1)
-            #     # bb = utils.rescale_bbox_x1y1wh([x1, y1, new_w, new_h], (orig_w, orig_h), new_shape)
-            #     tool_bbs[f"{frame_idx}"] = [[min(x1, x2), min(y1, y2), new_w, new_h]]
-            #     # update caluclate the new segmentations:
-            #     bb_segs, mask = sam_bbox_to_polygon(clean_frame_img, [x1, y1, x2, y2], eps=1.5)  # get the polygon from the bbox
-            #     tool_segs[f"{frame_idx}"] = bb_segs
-            #     cv2.destroyAllWindows()
-            #     continue
-              
+            
         elif key == ord('n'):  # Change category in-GUI
             image_with_classes = orig_frame_img.copy()
             y_offset = 165
@@ -307,12 +302,14 @@ def run_preview(preview_path, tool_bbs, tool_segs=None, hand_segs=None, new_shap
                 y_offset += 50
             cv2.imshow(winname, image_with_classes)
             while True:
-                selected_class = utils.ask_class(image_with_classes, max_id=12, prompt_win=winname, x_offset=configs.x_offset)
-                if selected_class < 0 or selected_class >= len(configs.category_id_to_name):
+                user_choice = utils.ask_class(image_with_classes, max_id=12, prompt_win=winname, x_offset=configs.x_offset, selected_class=selected_class)
+                if user_choice < 0 or user_choice >= len(configs.category_id_to_name):
                     print(" [!] Invalid class. Please select a valid category.")
                     continue
                 else:
-                    print(f" [*] Updated category to {configs.category_id_to_name[selected_class]}")
+                    if user_choice != selected_class:
+                        print(f" [*] Updated category to {configs.category_id_to_name[user_choice]}")
+                        selected_class = user_choice
                     frame_idx -= 1 # Go back to the same frame
                     break
 
@@ -325,6 +322,8 @@ def run_preview(preview_path, tool_bbs, tool_segs=None, hand_segs=None, new_shap
             else:
                 if tool_bbs[f"{frame_idx}"]:  # add tool if exist
                     cv2.imwrite(os.path.join(args.coco_data, 'images', frame_name), cv2.resize(to_save_image, dsize=new_shape, interpolation=cv2.INTER_LINEAR))
+                    if save_vis:
+                        cv2.imwrite(os.path.join(preview_path, 'vis', frame_name), vis_image)
                     img_saved = True
                     bb = utils.rescale_bbox_x1y1wh(tool_bbs[f"{frame_idx}"][0], (orig_w, orig_h), new_shape)  # assuming always one bb in each frame..
                     # print(f" Accepted BB for frame {frame_idx}: img_id: {img_id}- annID: {ann_id} --> {frame_name}")
@@ -732,18 +731,18 @@ def annotate_video_using_sam(args,
         - point prompts
         - Hand segmentations as a matrix representation for the mask
 
-    :param args: namespace contains all the user choices
-    :param curr_tool_output_path: output path to save the results
-    :param extract_tool: a flag whether to extract BB (if a tool is used in the video)
-    :param frame_names: a flag whether to extract the hand segmentations
-    :param opt_for_manual: a flag whether to ask the user for manually add bb
-    :param preview_before_save: play the results as a video (bb results)
-    :param debug: whether to debug the algorithm steps
-    :return tool_bbs, hands_segmentations: a dict for each frame the bbs and hand seg.
+    @param args: namespace contains all the user choices
+    @param curr_tool_output_path: output path to save the results
+    @param extract_tool: a flag whether to extract BB (if a tool is used in the video)
+    @param frame_names: a flag whether to extract the hand segmentations
+    @param opt_for_manual: a flag whether to ask the user for manually add bb
+    @param preview_before_save: play the results as a video (bb results)
+    @param debug: whether to debug the algorithm steps
+    @return tool_bbs, hands_segmentations: a dict for each frame the bbs and hand seg.
     """
     global winname, image_copy, start_point, end_point, clean_state, segment_by_points, next_video, tool_hand_segmentation
     v_path = args.video_path
-    segment_by_points = args.annotate_by_points
+    segment_by_points = True
     vid_name = os.path.split(v_path)[-1].split('.')[0]
     if curr_tool_output_path is None: # wrong here, fix
         sub_root_saved_path = os.path.join(curr_tool_output_path, f'{vid_name}')
@@ -825,19 +824,16 @@ def annotate_video_using_sam(args,
 
     cv2.destroyAllWindows()
     # SAVING SAM RESULTS
-    tool_bbs, tool_segs, hand_segs = utils.visualzie_annotations(sub_root_saved_path,
-                                                            success_indices,
-                                                            combined_video_segments,
-                                                            frame_paths,
-                                                            frame_names,
-                                                            vid_name,
-                                                            args,
-                                                            fps=min(30, len(frame_names) - 2),
-                                                            v_path=v_path)
+    tool_bbs, tool_segs, hand_segs = utils.extract_annotations(success_indices,
+                                                               combined_video_segments,
+                                                               format='coco')
 
     # to ensure the correct annotation, run a preview and edit the one that needed to editted.
     if preview_before_save:
-        run_preview(sub_root_saved_path, tool_bbs, tool_segs, hand_segs)
+        run_preview(sub_root_saved_path, tool_bbs, tool_segs, hand_segs, save_vis=args.save_visualization)
+
+    utils.reset_working_dir(current_working_file, delete_=True)
+    utils.reset_working_dir(frame_paths, delete_=True)
 
 
 def get_different_from_original(length_, k=100):
@@ -941,9 +937,9 @@ def fix_annotations(args, target_size=(640, 460)):
                     new_w, new_h = abs(x2 - x1), abs(y2 - y1)
                     anns['bbox'] = [min(x1, x2), min(y1, y2), new_w, new_h]
                     anns['area'] = new_w * new_h
-                    print(f"🛠️ Updated BB: {[x1, y1, new_w, new_h]}")
+                    print(f" Updated BB: {[x1, y1, new_w, new_h]}")
                 else:
-                    print("⟲ No BB drawn. Annotation will be skipped.")
+                    print(" No BB drawn. Annotation will be skipped.")
                     take_it = False
                     break  # skip to next image
 
@@ -968,9 +964,9 @@ def fix_annotations(args, target_size=(640, 460)):
                 selected_class = key2 - ord('0')
                 if selected_class in configs.category_id_to_name:
                     anns["category_id"] = selected_class
-                    print(f"✅ Updated category to {configs.category_id_to_name[selected_class]}")
+                    print(f" Updated category to {configs.category_id_to_name[selected_class]}")
                 else:
-                    print("⚠️ Invalid class. No change.")
+                    print(" Invalid class. No change.")
 
             elif key in (ord('a'), 13):  # Accept (Enter or 'a')
                 take_it = True
@@ -1092,8 +1088,6 @@ def ask_user_for_run_config():
         directory_path=None,
         output_dir="annotation_results",
         manually=False,
-        database=False,
-        annotate_by_points=False,
         file_data=None,
         fixer=False,
         images=None,
@@ -1107,7 +1101,6 @@ def ask_user_for_run_config():
     if mode == "1":                               # single video
         args.video_path = utils.input_with_path_completion("Full path to video: ")
         args.manually = _yes_no("Annotate manually (skip SAM2)?", default=False)
-        args.annotate_by_points = True#_yes_no("Draw points instead of bounding box?", default=False)
         od = utils.input_with_path_completion(f'Output directory (default: {args.output_dir}): ')
         if od:
             args.output_dir = od
@@ -1119,9 +1112,8 @@ def ask_user_for_run_config():
             args.directory_path = utils.input_with_path_completion(f"Directory path (current dir is - {os.getcwd()}): ")
         args.manually = _yes_no("Annotate manually (skip SAM2)?", default=False)
         args.save_visualization = _yes_no("Save visualization results?", default=False)
-        args.annotate_by_points = True  #_yes_no("Draw points instead of bounding box??", default=False)
         args.new_shape = (640, 360)  # default shape for the video frames
-        args.coco_data = 'tools_coco_format'
+        args.coco_data = 'results_coco_format'
         if not os.path.exists(args.coco_data):
             Path(f'{args.coco_data}/images').mkdir(parents=True, exist_ok=True)
             args.annotations = {'images': [], 'annotations': [],
@@ -1163,6 +1155,7 @@ def ask_user_for_run_config():
         args.output_path = os.path.join(coco_folder_path, 'fix_annotations.json')
     os.makedirs(args.output_dir, exist_ok=True)
 
+    print("--------------------------------------------------------------------\n")
     print("Arguments:")
     for k, v in vars(args).items():
         if k not in ['annotations']:
