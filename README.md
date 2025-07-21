@@ -44,11 +44,9 @@ This launches an **interactive wizard** that lets you choose **one of three work
 #### 1&nbsp;·&nbsp;Annotate a *single* video  
 * **Input** any `.mp4 / .mov` file  
 * **Output**  
-  - **Tool bounding-box** per sampled frame (YOLO txt format, `[x_c y_c w h]` normalised)  
-  - Optional **tool & hand polygons** (COCO JSON)  
-  - Optional preview video with BB overlays  
-* **How** YOLOv8 proposes a BB → you confirm / correct → SAM 2 propagates through the clip.
-
+  - **Object bounding-box** per sampled frame (YOLO txt format, [x_c y_c w h], or coco format bb [x, y, w, h] normalised)  
+  - **object & hand polygons** (COCO JSON)  
+  - Optional saved overlayed visualization 
 ---
 
 #### 2&nbsp;·&nbsp;Annotate an *entire directory* of class-organised videos  
