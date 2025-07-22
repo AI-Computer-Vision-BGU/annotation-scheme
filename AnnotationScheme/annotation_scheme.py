@@ -52,6 +52,9 @@ parser.add_argument("--weights", type=str,
 parser.add_argument("--new_shape", nargs=2, type=int, metavar=("W", "H"),
                         default=(640, 360), help="Resize frames before export")
 
+parser.add_argument("--repeat", type=int,
+                        default=20, help="Resize frames before export")
+
 args_parser = parser.parse_args()
 
 # INITIALIZE MODELS AND GLOBAL VARIABLES
@@ -60,19 +63,13 @@ sam_video_predictor = build_sam2_video_predictor(configs.config_weights_mapping[
 sam_predictor = SAM2ImagePredictor(build_sam2(configs.config_weights_mapping[args_parser.weights]['configs'],
                                               configs.config_weights_mapping[args_parser.weights]['weights'], device=device))
 yolo_failed = False
-# these two for initial bounding box
-start_point = None
-end_point = None
-# this for segment based a point
 # right click for points to segment, left point for excluded segmentation
 segment_by_points = True
-include_points = []
-exclude_points = []
 # this is for the tool hand segmentation. 1- tool, 2- hand
 active_prompt = '1'        # '1' → tool, '2' → hand
 tool_hand_segmentation = {
-    '1': {'include_points':[], 'exclude_points':[]},
-    '2': {'include_points':[], 'exclude_points':[]}
+    '1': {'include_points':[], 'exclude_points':[], 'start_point': None, 'end_point': None},
+    '2': {'include_points':[], 'exclude_points':[], 'start_point': None, 'end_point': None}
 }
 # these variables for manually annotator GUI
 next_video = False
@@ -109,7 +106,7 @@ def mouse_callback(event, x, y, flags, param):
             cv2.circle(image_copy, (x, y), 5, param[active_prompt], -1)
         else:
             image_copy = clean_state.copy()
-            start_point = [x, y]
+            tool_hand_segmentation[active_prompt]['start_point'] = [x, y]
             is_drawing  = True
 
     # ---------- RIGHT button down  -----------------------------------
@@ -119,20 +116,22 @@ def mouse_callback(event, x, y, flags, param):
             cv2.circle(image_copy, (x, y), 5, configs.COLORS['exclude'], -1)
         else:
             image_copy = clean_state.copy()
-            start_point = [x, y]
+            tool_hand_segmentation[active_prompt]['start_point'] = [x, y]
             is_drawing  = True
 
     # ---------- mouse move (rectangle preview) ------------------------
     elif event == cv2.EVENT_MOUSEMOVE and is_drawing and not segment_by_points:
-        end_point = [x, y]
-        cv2.rectangle(temp_image, start_point, end_point, (0, 255, 0), 2)
+        tool_hand_segmentation[active_prompt]['end_point'] = [x, y]
+        cv2.rectangle(temp_image, tool_hand_segmentation[active_prompt]['start_point'],
+                       tool_hand_segmentation[active_prompt]['end_point'], (0, 255, 0), 2)
 
     # ---------- button up  -------------------------------------------
     elif event in (cv2.EVENT_LBUTTONUP, cv2.EVENT_RBUTTONUP):
         is_drawing = False
         if not segment_by_points:
-            end_point = [x, y]
-            cv2.rectangle(image_copy, start_point, end_point,
+            tool_hand_segmentation[active_prompt]['end_point'] = [x, y]
+            cv2.rectangle(image_copy, tool_hand_segmentation[active_prompt]['start_point'],
+                           tool_hand_segmentation[active_prompt]['end_point'],
                           bb_editting_color, 2)
 
     # ---------- refresh window ---------------------------------------
@@ -163,11 +162,11 @@ def add_manually_bb(frame_image, mode='regular'):
             cv2.line(frame_vis, (cx, 0),  (cx, frame_vis.shape[0]), configs.COLORS['cross_line'], 1)
             cv2.line(frame_vis, (0,  cy), (frame_vis.shape[1], cy), configs.COLORS['cross_line'], 1)
         
-        if start_point is not None:
-            if end_point is not None:
-                cv2.rectangle(frame_vis, tuple(start_point), tuple(end_point), (0, 255, 0), 2)
+        if tool_hand_segmentation[active_prompt]['start_point'] is not None:
+            if tool_hand_segmentation[active_prompt]['end_point'] is not None:
+                cv2.rectangle(frame_vis, tuple(tool_hand_segmentation[active_prompt]['start_point']), tuple(tool_hand_segmentation[active_prompt]['end_point']), (0, 255, 0), 2)
             else:
-                cv2.rectangle(frame_vis, tuple(start_point), tuple(cursor_pos), (0, 255, 0), 2)
+                cv2.rectangle(frame_vis, tuple(tool_hand_segmentation[active_prompt]['start_point']), tuple(cursor_pos), (0, 255, 0), 2)
 
         # if mode == 'review':
         #     cv2.waitKey(0)  # wait for 1 ms to update the window
@@ -194,15 +193,15 @@ def add_manually_bb(frame_image, mode='regular'):
 
 
 def reset_globals():
-    global start_point, end_point, include_points, exclude_points, next_video, tool_hand_segmentation
-    start_point, end_point = None, None
-    include_points = []
-    exclude_points = []
+    global next_video, tool_hand_segmentation
+
     next_video = False
-    tool_hand_segmentation = {
-        '1': {'include_points': [], 'exclude_points': []},
-        '2': {'include_points': [], 'exclude_points': []}
-    }
+    for obj_id in tool_hand_segmentation.keys():
+        for stream in tool_hand_segmentation[obj_id].keys():
+            if 'inc' in stream or 'exc' in stream:
+                tool_hand_segmentation[obj_id][stream] = []
+            else:
+                tool_hand_segmentation[obj_id][stream] = None
 
 
 def run_preview(preview_path, tool_bbs, tool_segs=None, hand_segs=None, new_shape=(640, 360), milli=0, save_vis=False):
@@ -235,10 +234,12 @@ def run_preview(preview_path, tool_bbs, tool_segs=None, hand_segs=None, new_shap
         img_saved = False
         img_id_indicator = False
 
-        if f'{frame_idx}' not in tool_bbs or tool_bbs[f'{frame_idx}'] == [None]:
+        bbox = tool_bbs.get(str(frame_idx))  
+        # skip if missing OR explicitly marked as "empty"
+        if bbox is None or len(bbox) == 0 or (isinstance(bbox, list) and bbox == [None]):
             frame_idx += 1
             continue
-
+        
         orig_frame_img = utils.draw_cocoBB_from_dict(orig_frame_img.copy(), tool_bbs[f'{frame_idx}'], configs.category_id_to_name[selected_class] if selected_class > -1 else "Unknown",
                                                         orig_width=orig_w, orig_height=orig_h,
                                                         target_size=(orig_w, orig_h))
@@ -415,51 +416,6 @@ def run_preview(preview_path, tool_bbs, tool_segs=None, hand_segs=None, new_shap
 #########################################################
 #                YOLO + SAM2 Auxiliary                  #
 #########################################################
-def show_points(coords, labels, ax, marker_size=200):
-    pos_points = coords[labels==1]
-    neg_points = coords[labels==0]
-    ax.scatter(pos_points[:, 0], pos_points[:, 1], color='green', marker='*', s=marker_size, edgecolor='white', linewidth=1.25)
-    ax.scatter(neg_points[:, 0], neg_points[:, 1], color='red', marker='*', s=marker_size, edgecolor='white', linewidth=1.25)
-
-
-def refine_mask_with_coordinates(inference_state, output_path, ann_frame_idx, ann_obj_id, frame_names, show_result=False):
-    """
-    Refine a mask by adding new points using a SAM predictor.
-    :param inference_state: SAM2 Model
-    :param output_path: The path to save the results.
-    :param box: bb coordinates of the for [x1, y1, x2, y2],
-    :param ann_frame_idx: The index of the frame being processed
-    :param ann_obj_id: A unique identifier for the object being segmented
-    :param frame_names: The names of the frame video
-    :param show_result: Whether to display the result (default: True)
-    @param points:
-    """
-    global include_points, exclude_points, segment_by_points
-    points = np.array([[0, 0]], dtype=np.float32)
-    labels = np.array([0], np.int32)
-    if segment_by_points:
-        # Add new points to the predictor
-        points = [p for p in include_points + exclude_points]
-        labels = [1 for _ in range(len(include_points))] + [0 for _ in range(len(exclude_points))]
-        points = np.array(points, dtype=np.float32)
-        labels = np.array(labels, np.int32)
-        _, out_obj_ids, out_mask_logits = sam_video_predictor.add_new_points_or_box(
-            inference_state=inference_state,
-            frame_idx=ann_frame_idx,
-            obj_id=ann_obj_id,
-            points=points,
-            labels=labels
-        )
-    else:
-        # Add new points to the predictor
-        _, out_obj_ids, out_mask_logits = sam_video_predictor.add_new_points_or_box(
-            inference_state=inference_state,
-            frame_idx=ann_frame_idx,
-            obj_id=ann_obj_id,
-            box=[*start_point, *end_point]
-        )
-
-
 def run_propagation(inference_state):
   video_segments = {}  # video_segments contains the per-frame segmentation results
   for out_frame_idx, out_obj_ids, out_mask_logits in sam_video_predictor.propagate_in_video(inference_state):
@@ -475,12 +431,12 @@ def second_stage(sam_video_predictor, output_frames_path, detected_frame_idx):
     Initialise SAM once, add obj-10 (tool) + obj-20 (hand) prompts,
     then propagate.
     """
-    global tool_hand_segmentation, start_point, end_point
+    global tool_hand_segmentation
     # 1) init state on the temp frame folder
     inference_state = sam_video_predictor.init_state(video_path=output_frames_path)
     TOOL_ID, HAND_ID = 10, 20
 
-    if start_point and end_point:
+    if tool_hand_segmentation['1']['start_point'] and tool_hand_segmentation['1']['end_point']:
         x1, y1 = start_point
         x2, y2 = end_point
         sam_video_predictor.add_new_points_or_box(
@@ -529,7 +485,7 @@ def sam_prompt_to_polygons(img_bgr, eps=1.5, min_area=10):
     @param eps: The epsilon value for polygon approximation
     @param min_area: The minimum area for a contour to be considered valid
     """
-    global sam_predictor, start_point, end_point, tool_hand_segmentation
+    global sam_predictor, tool_hand_segmentation
 
     sam_predictor.set_image(img_bgr[..., ::-1].copy())
     H, W = img_bgr.shape[:2]
@@ -554,10 +510,10 @@ def sam_prompt_to_polygons(img_bgr, eps=1.5, min_area=10):
             multimask_output=False)
         return masks[0].astype(np.uint8)
 
-    # -------------------------------------------------------  1. RECTANGLE?
-    if start_point and end_point:
-        x1, y1 = start_point
-        x2, y2 = end_point
+    # -------------------------------------------------------  1. RECTANGLE?e
+    if tool_hand_segmentation['1']['start_point'] and tool_hand_segmentation['1']['end_point']:
+        x1, y1 = tool_hand_segmentation['1']['start_point']
+        x2, y2 = tool_hand_segmentation['1']['end_point']
         box = [min(x1, x2), min(y1, y2), abs(x2 - x1), abs(y2 - y1)]
         mask = _run_sam(box=[min(x1, x2), min(y1, y2), max(x1, x2), max(y1, y2)])
         results["tool"] = {"bbox": [box], "segs": _mask_to_polys(mask)}
@@ -701,8 +657,6 @@ def annotate_all_video_manually(v_path, curr_tool_output_path=None,
                           fps, (width, height))
     tool_bbs = {}
     for counter, sample_idx in enumerate(samples):
-        start_point, end_point = None, None
-
         frame_number = int(frame_names[sample_idx].split('.')[0])
         frame_image = cv2.imread(os.path.join(frame_paths, frame_names[sample_idx]))
         winname = f'{frame_number}/{frame_length}'
@@ -736,8 +690,7 @@ def annotate_video_using_sam(args,
                              curr_tool_output_path=None,
                              extract_tool=True,
                              frame_names=None,
-                             range_step=50,
-                             opt_for_manual=True, preview_before_save=False, debug=False, target_shape=(640, 360)):
+                             preview_before_save=False, debug=False):
     """
     This function is responsible for annotating the given video by:
         - point prompts
@@ -792,7 +745,7 @@ def annotate_video_using_sam(args,
     while i < total_frames:
         reset_globals()
         # Prepare the current window of frames
-        indices = utils.find_range(i, frame_names, range_step=range_step)
+        indices = utils.find_range(i, frame_names, range_step=args.repeat)
         if debug:
             print(f' > Starting with {indices[0]} - {indices[-1]}/{len(indices)} frames from {len(frame_names)} frames')
 
@@ -904,8 +857,8 @@ def fix_annotations(args, target_size=(640, 460)):
     for img_idx, img_info in enumerate(coco["images"]):
         if img_info["id"] <= start_id:  # already done.
             continue
-
-        start_point, end_point = None, None
+        
+        reset_globals()
         image_path = Path(args.images_path) / img_info["file_name"]
         if not image_path.exists():
             print(f"[Missing] {image_path}")
@@ -945,7 +898,7 @@ def fix_annotations(args, target_size=(640, 460)):
 
             elif key == ord('e'):  # Edit bounding box
                 # cv2.destroyAllWindows()
-                start_point, end_point = None, None
+                reset_globals()
                 add_manually_bb(img_np)
                 if start_point and end_point:
                     x1, y1 = start_point
@@ -1113,6 +1066,7 @@ def ask_user_for_run_config():
         output_dir="annotation_results",
         weights=weights_name_mapping[args_parser.weights],
         manually=False,
+        repeat=args_parser.repeat,
         fixer=False,
         tracker=None,
         coco_data=None,
