@@ -68,7 +68,7 @@ The **Output** of both flows as follow
   ---
 
 
-The first window will look like this, where you can choose to skip this video ([N] keyword), or exit the program ([X] keyword)
+The first window will look like this, where you can choose to skip this video [N], or exit the program [X] keywords
 ![First Window](assets/init_w.png)
 
 To continue annotating the video, press any keyword (space, enter, etc...) -- This will get you to the annotator scheme.
