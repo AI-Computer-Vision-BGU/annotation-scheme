@@ -22,15 +22,10 @@ pip install -r requirements.txt
 
 * Then, install SAM requirements. More Info [Here](https://github.com/facebookresearch/sam2/blob/main/INSTALL.md)
 ```bash
-cd segmentanything
-pip install -e .
-./checkpoints/download_ckpts.sh    # download the weights for the model
+cd segmentanything &&\
+pip install -e . &&\
+./checkpoints/download_ckpts.sh   &&\
 cd ..
-```
-
-* Make sure [segment-anything](https://github.com/facebookresearch/segment-anything?tab=readme-ov-file) is installed also:
-```bash
-pip install git+https://github.com/facebookresearch/segment-anything.git
 ```
 
 
