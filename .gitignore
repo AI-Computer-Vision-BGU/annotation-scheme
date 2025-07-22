@@ -5,3 +5,4 @@ AnnotationScheme/results_coco_format
 __pycache__/annotation_results/
 annotation_results/
 *.py[cod]
+results_coco_format/images/
