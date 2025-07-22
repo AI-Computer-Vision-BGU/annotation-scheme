@@ -3,3 +3,4 @@ AnnotationScheme/orginizator.py
 AnnotationScheme/results_coco_format
 .DS_Store
 __pycache__/annotation_results/
+annotation_results/
