@@ -8,14 +8,11 @@ it works as follows:
  - SAM2 is then applied to continue to detect the bb based on the initial bb we choose
  - repeat every n frames
 
- bbs are saved as yolo format [x_c, y_c, w, h] normalized to the image size (old (before 2025))
-
  
  UPDATES:
   13/07/2025 -- added annotations for hand segmentations by asking user in real-time to choose points for hands or tool (or both)
 
 # TODO:
-    4- add exit button to the GUI to exit the program (save the changes...)
 
 SEARCH WORDS IN THIS FILE FOR EDITTING/FIXING:
 1. MOVE
