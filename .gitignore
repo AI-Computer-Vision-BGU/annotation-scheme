@@ -2,4 +2,4 @@ segmmentanything/checkpoints/*
 AnnotationScheme/orginizator.py
 AnnotationScheme/results_coco_format
 .DS_Store
-__pycache__/
+__pycache__/annotation_results/

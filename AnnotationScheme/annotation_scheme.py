@@ -145,7 +145,7 @@ def add_manually_bb(frame_image, mode='regular'):
     while True:
         frame_vis = image_copy.copy()
 
-        # ---------- 1. draw live cross-hair ----------
+        # ---------- live cross-hair and BB ----------
         if cursor_pos is not None:
             cx, cy = cursor_pos
             cv2.line(frame_vis, (cx, 0),  (cx, frame_vis.shape[0]), configs.COLORS['cross_line'], 1)
@@ -169,7 +169,7 @@ def add_manually_bb(frame_image, mode='regular'):
                     0.8, (255, 0, 255), 2, cv2.LINE_AA)
         cv2.imshow(winname, frame_vis)
 
-        key = cv2.waitKey(20) & 0xFF   # 20 ms tick → smooth UI
+        key = cv2.waitKey(10) & 0xFF   # 20 ms tick → smooth UI
         if key in (13, 32):            # Enter or Space → finish
             break
         elif key == ord('1'):
@@ -201,20 +201,18 @@ def run_preview(preview_path, tool_bbs, tool_segs=None, hand_segs=None, new_shap
     :return:
     """
     global segment_by_points, winname, start_point, end_point
+    if save_vis:
+        if not os.path.exists(os.path.join(preview_path, 'vis')):
+            os.makedirs(os.path.join(preview_path, 'vis'))
     images = []
     annotations = []
     img_id = len(os.listdir(os.path.join(args.coco_data, 'images')))
     ann_id = len(annotations)
-
     frame_idx = 0
     selected_class = -1
     total_frames = len(os.listdir(os.path.join(preview_path, 'frames')))
-    winname = 'Preview' #f'{frame_idx}'  winname here so the window does not close and open after each frame..
-    if save_vis:
-        if not os.path.exists(os.path.join(preview_path, 'vis')):
-            os.makedirs(os.path.join(preview_path, 'vis'))
+    winname = f'Preview - {os.path.split(preview_path)[-1]}'#  winname here so the window does not close and open after each frame..
 
-        winname = f'Preview - {os.path.split(preview_path)[-1]}'
     while frame_idx < total_frames:
         orig_frame_path = os.path.join(preview_path, 'frames', f'{frame_idx:05d}.jpg')
         orig_frame_img = cv2.imread(orig_frame_path)
@@ -263,7 +261,7 @@ def run_preview(preview_path, tool_bbs, tool_segs=None, hand_segs=None, new_shap
             sys.exit()
 
         if key in (ord('e'),):  # EDIT BB
-            reset_globals()
+            reset_globals() 
             # segment_by_points = False
             cv2.putText(clean_frame_img, f'{frame_idx}/{total_frames-1}', (configs.x_offset, 30), cv2.FONT_HERSHEY_SIMPLEX,
                     1.2, (255, 255, 0), 3, cv2.LINE_AA)
@@ -277,12 +275,15 @@ def run_preview(preview_path, tool_bbs, tool_segs=None, hand_segs=None, new_shap
                 
                 if "hand" in results:
                     hand_segs[f'{frame_idx}'] = results["hand"]["segs"]
-                cv2.destroyAllWindows()
-                continue
+                
             else:
-                print(f" [*] Skipped frame {frame_idx}")
                 tool_bbs[f"{frame_idx}"] = [[]]  # mark skipped
                 tool_segs[f"{frame_idx}"] = [[]]  # mark skipped
+                print(f" [*] Skipped frame {frame_idx}")
+
+            cv2.destroyAllWindows()
+            continue
+
             
         elif key == ord('n'):  # Change category in-GUI
             image_with_classes = orig_frame_img.copy()
@@ -549,13 +550,12 @@ def sam_prompt_to_polygons(img_bgr, eps=1.5, min_area=10):
         mask = _run_sam(box=[min(x1, x2), min(y1, y2), max(x1, x2), max(y1, y2)])
         results["tool"] = {"bbox": [box], "segs": _mask_to_polys(mask)}
         print(f" [*] Detected tool with bounding box: {len(results['tool']['segs'])}")
-        # return results                                    # nothing else to do
 
     # -------------------------------------------------------  2. POINT PROMPTS?
     for prompt_key, label in (('1', "tool"), ('2', "hand")):
         inc = tool_hand_segmentation[prompt_key]['include_points']
         exc = tool_hand_segmentation[prompt_key]['exclude_points']
-        if not inc and not exc:                 # no clicks → skip this class
+        if not inc and not exc:                 # no clicks -- skip this class
             continue
 
         pts = np.array(inc + exc, np.float32)
@@ -1113,7 +1113,9 @@ def ask_user_for_run_config():
         args.manually = _yes_no("Annotate manually (skip SAM2)?", default=False)
         args.save_visualization = _yes_no("Save visualization results?", default=False)
         args.new_shape = (640, 360)  # default shape for the video frames
-        args.coco_data = 'results_coco_format'
+        args.coco_data = utils.input_with_path_completion(f"Saved directory path (will be saved under - {os.getcwd()}): ")
+        if args.coco_data == '':
+            args.coco_data = 'results_coco_format'
         if not os.path.exists(args.coco_data):
             Path(f'{args.coco_data}/images').mkdir(parents=True, exist_ok=True)
             args.annotations = {'images': [], 'annotations': [],
@@ -1155,7 +1157,7 @@ def ask_user_for_run_config():
         args.output_path = os.path.join(coco_folder_path, 'fix_annotations.json')
     os.makedirs(args.output_dir, exist_ok=True)
 
-    print("--------------------------------------------------------------------\n")
+    print("\n--------------------------------------------------------------------")
     print("Arguments:")
     for k, v in vars(args).items():
         if k not in ['annotations']:
@@ -1170,4 +1172,3 @@ if __name__ == "__main__":
     annotator(args)
     if args.coco_data is not None:
         utils.save_open_video_names_as_pickles(args.done_video_names, path=os.path.join(args.coco_data, 'done_video_names.pkl'), op='save')
-
