@@ -84,11 +84,12 @@ The very first pop-up lets you bail out early:
 
 ### 2 · Annotator GUI  
 Press **any other key** (Space / Enter) to jump into the annotator loop.
-
-* **1** → annotate the **tool**  
-* **2** → annotate the **hands**  
-* **b** → toggle between **Bounding-box** mode and **Point-prompt** mode  
-* **any other key**  → SAM 2 uses that prompt to propagate over the next **50 frames**  
+| Key | Action |
+|-----|--------|
+| **1** | annotate the **object**   |
+| **2** | annotate the **hands**  |
+| **b** | toggle between **Bounding-box** mode and **Point-prompt** mode  |
+| **any other key**  | SAM2 starts with these prompts to propagate over the next **50 frames**  |
 
 <p align="center">
   <img src="assets/annotator.gif" width="640" alt="Live annotation demo">
