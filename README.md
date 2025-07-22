@@ -69,7 +69,8 @@ The **Output** of both flows as follow
 
 
 The first window will look like this, where you can choose to skip this video ([N] keyword), or exit the program ([X] keyword)
-[First Window](assets/init_w.png)
+![First Window](assets/init_w.png)
+
 
 
 
