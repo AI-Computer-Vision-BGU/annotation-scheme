@@ -66,6 +66,7 @@ The **Output** of both flows as follow
   </pre>
 
   ---
+## Interactive GUI
 
 ### 1 · Initial decision screen  
 The very first pop-up lets you bail out early:
