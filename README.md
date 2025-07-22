@@ -43,7 +43,6 @@ This launches an **interactive wizard** that lets you choose **one of three work
 
 #### 1&nbsp;·&nbsp;Annotate a *single* video  
 * **Input** any `.mp4 / .mov` file  
---
 
 #### 2&nbsp;·&nbsp;Annotate an *entire directory* of class-organised videos
 * Input (root path)
@@ -67,6 +66,11 @@ The **Output** of both flows as follow
   </pre>
 
   ---
+
+
+The first window will look like this, where you can choose to skip this video ([N] keyword), or exit the program ([X] keyword)
+[First Window](assets/init_w.png)
+
 
 
 ## Stat
