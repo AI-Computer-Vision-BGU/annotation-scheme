@@ -43,11 +43,7 @@ This launches an **interactive wizard** that lets you choose **one of three work
 
 #### 1&nbsp;·&nbsp;Annotate a *single* video  
 * **Input** any `.mp4 / .mov` file  
-* **Output**  
-  - **Object bounding-box** per sampled frame (YOLO txt format, [x_c y_c w h], or coco format bb [x, y, w, h] normalised)  
-  - **object & hand polygons** (COCO JSON)  
-  - Optional saved overlayed visualization 
----
+--
 
 #### 2&nbsp;·&nbsp;Annotate an *entire directory* of class-organised videos
 * Input (root path)
@@ -69,6 +65,8 @@ This launches an **interactive wizard** that lets you choose **one of three work
     └── Annotations.json
 
   </pre>
+
+  ---
 
 
 ## Stat
