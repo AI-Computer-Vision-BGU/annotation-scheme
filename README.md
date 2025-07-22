@@ -24,7 +24,8 @@ pip install -r requirements.txt
 ```bash
 cd segmentanything && \
 pip install -e . && \
-./checkpoints/download_ckpts.sh   && \
+cd checkpoints && \ 
+./download_ckpts.sh   && \
 cd ..
 ```
 
