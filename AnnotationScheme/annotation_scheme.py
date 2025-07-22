@@ -34,19 +34,34 @@ from segmentanything.sam2.sam2_image_predictor import SAM2ImagePredictor
 from utils import utils
 import configs
 import json
-import warnings
 import  torch
 from types import SimpleNamespace
 import cv2
 import numpy as np
+import argparse
+import warnings
 warnings.filterwarnings("ignore")
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print(f'Device: {device}')
 
+# ---------------------------------------------------------- Admin
+parser = argparse.ArgumentParser(
+        description="Semi-automatic video annotation",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+
+parser.add_argument("--weights", type=str,
+                        default='t', help="choose sam2 weights [tiny (t), small (s), base_plus (b), large (l)] default- t")
+parser.add_argument("--new_shape", nargs=2, type=int, metavar=("W", "H"),
+                        default=(640, 360), help="Resize frames before export")
+
+args_parser = parser.parse_args()
+
 # INITIALIZE MODELS AND GLOBAL VARIABLES
-sam_video_predictor = build_sam2_video_predictor(configs.model_cfg, configs.sam2_checkpoint_video, device=device)
-sam_predictor = SAM2ImagePredictor(build_sam2(configs.model_cfg, configs.sam2_checkpoint_video, device=device))
+sam_video_predictor = build_sam2_video_predictor(configs.config_weights_mapping[args_parser.weights]['configs'],
+                                                 configs.config_weights_mapping[args_parser.weights]['weights'], device=device)
+sam_predictor = SAM2ImagePredictor(build_sam2(configs.config_weights_mapping[args_parser.weights]['configs'],
+                                              configs.config_weights_mapping[args_parser.weights]['weights'], device=device))
 yolo_failed = False
 # these two for initial bounding box
 start_point = None
@@ -165,7 +180,7 @@ def add_manually_bb(frame_image, mode='regular'):
         edit_mode_text = "BB" if not segment_by_points else "Points"
         cv2.putText(frame_vis, f"Mode (1- TOOL, 2- HAND):   {mode_text}", (configs.x_offset, 90), cv2.FONT_HERSHEY_SIMPLEX,
                     0.8, (255, 0, 255), 2, cv2.LINE_AA)
-        cv2.putText(frame_vis, f"Drawing (press b to change): {edit_mode_text}", (configs.x_offset, 120), cv2.FONT_HERSHEY_SIMPLEX,
+        cv2.putText(frame_vis, f"Drawing (press b to change):  {edit_mode_text}", (configs.x_offset, 120), cv2.FONT_HERSHEY_SIMPLEX,
                     0.8, (255, 0, 255), 2, cv2.LINE_AA)
         cv2.imshow(winname, frame_vis)
 
@@ -832,8 +847,12 @@ def annotate_video_using_sam(args,
     if preview_before_save:
         run_preview(sub_root_saved_path, tool_bbs, tool_segs, hand_segs, save_vis=args.save_visualization)
 
-    utils.reset_working_dir(current_working_file, delete_=True)
-    utils.reset_working_dir(frame_paths, delete_=True)
+    if args.save_visualization:
+        utils.reset_working_dir(frame_paths, delete_=True)
+        utils.reset_working_dir(current_working_file, delete_=True)
+    else:    
+        utils.reset_working_dir(sub_root_saved_path, delete_=True)
+    # utils.reset_working_dir(frame_paths, delete_=True)
 
 
 def get_different_from_original(length_, k=100):
@@ -1062,14 +1081,15 @@ def _yes_no(prompt, default=False):
         if ans in {"n", "no", "N", "No", "NO"}:
             return False
         print("  ➜ Please answer with y / n")
+    
 
 def ask_user_for_run_config():
     """
     Query the user for the desired annotation mode and store the
     answers in a global variable called `args`.
     """
-    global args                      # the rest of the script expects this
-    print("\n=== Annotation Scheme – interactive setup ===")
+    global args, args_parser                    # the rest of the script expects this
+    print("\n=== Annotation Scheme - interactive setup ===")
 
     # 1) choose high-level mode ------------------------------------------------
     print("Choose what to annotate:")
@@ -1081,24 +1101,30 @@ def ask_user_for_run_config():
     mode = None
     while mode not in {"1", "2", "3"}:
         mode = input("Mode [1/2/3]: ").strip()
+    
+    weights_name_mapping = {
+        't': 'tiny',
+        's': 'small',
+        'b': 'base_plus',
+        'l': 'large',
+    }
 
     # initialise defaults --------------------------
     args = SimpleNamespace(
         video_path=None,
         directory_path=None,
         output_dir="annotation_results",
+        weights=weights_name_mapping[args_parser.weights],
         manually=False,
-        file_data=None,
         fixer=False,
-        images=None,
         tracker=None,
         coco_data=None,
         done_video_names=None,
         save_visualization=False,
     )
 
-    # 2) gather per-mode details ----------------------------------------------
-    if mode == "1":                               # single video
+    # ---------------------------------------------- single video
+    if mode == "1":                               
         args.video_path = utils.input_with_path_completion("Full path to video: ")
         args.manually = _yes_no("Annotate manually (skip SAM2)?", default=False)
         od = utils.input_with_path_completion(f'Output directory (default: {args.output_dir}): ')
@@ -1106,13 +1132,15 @@ def ask_user_for_run_config():
             args.output_dir = od
         args.save_visualization = _yes_no("Save visualization results?", default=False)
 
-    elif mode == "2":                             # Directory
+    # ---------------------------------------------- Directory
+    elif mode == "2":                            
         args.directory_path = utils.input_with_path_completion(f"Directory path (current dir is - {os.getcwd()}): ")
-        while args.directory_path == '':
+        while not os.path.exists(args.directory_path):
+            print(f'[!] Invalid Path')
             args.directory_path = utils.input_with_path_completion(f"Directory path (current dir is - {os.getcwd()}): ")
         args.manually = _yes_no("Annotate manually (skip SAM2)?", default=False)
         args.save_visualization = _yes_no("Save visualization results?", default=False)
-        args.new_shape = (640, 360)  # default shape for the video frames
+        args.new_shape = args_parser.new_shape # default shape for the video frames
         args.coco_data = utils.input_with_path_completion(f"Saved directory path (will be saved under - {os.getcwd()}): ")
         if args.coco_data == '':
             args.coco_data = 'results_coco_format'
@@ -1148,15 +1176,16 @@ def ask_user_for_run_config():
         args.category_id_mapping = {cat['name'].lower(): cat['id'] for cat in args.annotations['categories']}
         args.id_category_mapping = {cat['id']: cat['name'].lower() for cat in args.annotations['categories']}
 
-
+    # ---------------------------------------------- Fixer
     elif mode == "3":
         args.fixer = True
         coco_folder_path = utils.input_with_path_completion(f"The path to coco based format folder [ccontains images and annotations.json] getcwd: {os.getcwd()}: ")
         args.images_path = os.path.join(coco_folder_path, 'images')
         args.annotations_path = os.path.join(coco_folder_path, 'annotations.json')
         args.output_path = os.path.join(coco_folder_path, 'fix_annotations.json')
+    
+    
     os.makedirs(args.output_dir, exist_ok=True)
-
     print("\n--------------------------------------------------------------------")
     print("Arguments:")
     for k, v in vars(args).items():

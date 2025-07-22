@@ -4,9 +4,15 @@ DATASET_PATH_SSD = f'/Volumes/{SSD_NAME}'
 DATABASE_PATH_SDD = f'{DATASET_PATH_SSD}/maintenance_dataset.db'
 DB_TABLE_NAME = 'MaintenanceActions_metadata'
 
-# ---------------------------------------- weights path
-sam2_checkpoint_video = 'segmentanything/checkpoints/sam2.1_hiera_tiny.pt'
-model_cfg = "configs/sam2.1/sam2.1_hiera_t.yaml"
+# ---------------------------------------- weights configs
+config_weights_mapping = {
+    't': {'configs': 'configs/sam2.1/sam2.1_hiera_t.yaml', 'weights': 'segmentanything/checkpoints/sam2.1_hiera_tiny.pt'},  
+    'b': {'configs': 'configs/sam2.1/sam2.1_hiera_b+.yaml', 'weights': 'segmentanything/checkpoints/sam2.1_hiera_base_plus.pt'},
+    's': {'configs': 'configs/sam2.1/sam2.1_hiera_s.yaml', 'weights': 'segmentanything/checkpoints/sam2.1_hiera_small.pt'},
+    'l': {'configs': 'configs/sam2.1/sam2.1_hiera_l.yaml', 'weights': 'segmentanything/checkpoints/sam2.1_hiera_large.pt'},
+}
+
+
 
 # ---------------------------------------- Change based on the object one need to segment
 TOOL_CATEGORIES = ['Hammer', 'Cut', 'Screw', 'Piping', 'Measure']

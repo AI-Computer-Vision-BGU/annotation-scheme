@@ -1,66 +1,66 @@
 {
-    "images": [],
-    "annotations": [],
-    "categories": [
-        {
-            "id": 0,
-            "name": "SL",
-            "supercategory": "tool"
-        },
-        {
-            "id": 1,
-            "name": "adjustable spanner",
-            "supercategory": "tool"
-        },
-        {
-            "id": 2,
-            "name": "allen",
-            "supercategory": "tool"
-        },
-        {
-            "id": 3,
-            "name": "drill",
-            "supercategory": "tool"
-        },
-        {
-            "id": 4,
-            "name": "hammer",
-            "supercategory": "tool"
-        },
-        {
-            "id": 5,
-            "name": "plier",
-            "supercategory": "tool"
-        },
-        {
-            "id": 6,
-            "name": "ratchet",
-            "supercategory": "tool"
-        },
-        {
-            "id": 7,
-            "name": "screwdriver",
-            "supercategory": "tool"
-        },
-        {
-            "id": 8,
-            "name": "tapemeasure",
-            "supercategory": "tool"
-        },
-        {
-            "id": 9,
-            "name": "wrench",
-            "supercategory": "tool"
-        },
-        {
-            "id": 10,
-            "name": "hands",
-            "supercategory": "hands"
-        },
-        {
-            "id": 11,
-            "name": "saw",
-            "supercategory": "tool"
-        }
-    ]
+  "images": [],
+  "annotations": [],
+  "categories": [
+    {
+      "id": 0,
+      "name": "SL",
+      "supercategory": "tool"
+    },
+    {
+      "id": 1,
+      "name": "adjustable spanner",
+      "supercategory": "tool"
+    },
+    {
+      "id": 2,
+      "name": "allen",
+      "supercategory": "tool"
+    },
+    {
+      "id": 3,
+      "name": "drill",
+      "supercategory": "tool"
+    },
+    {
+      "id": 4,
+      "name": "hammer",
+      "supercategory": "tool"
+    },
+    {
+      "id": 5,
+      "name": "plier",
+      "supercategory": "tool"
+    },
+    {
+      "id": 6,
+      "name": "ratchet",
+      "supercategory": "tool"
+    },
+    {
+      "id": 7,
+      "name": "screwdriver",
+      "supercategory": "tool"
+    },
+    {
+      "id": 8,
+      "name": "tapemeasure",
+      "supercategory": "tool"
+    },
+    {
+      "id": 9,
+      "name": "wrench",
+      "supercategory": "tool"
+    },
+    {
+      "id": 10,
+      "name": "hands",
+      "supercategory": "hands"
+    },
+    {
+      "id": 11,
+      "name": "saw",
+      "supercategory": "tool"
+    }
+  ]
 }
