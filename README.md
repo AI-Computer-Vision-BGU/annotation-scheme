@@ -12,7 +12,7 @@ This repo contains the semi-automatic video annotation pipeline used in our [Mai
 ## Installation
 
 
-* First, clone the repo with its submodules
+1. First, clone the repo with its submodules
 ```bash
 git clone --recursive https://github.com/AI-Computer-Vision-BGU/Annotation-Scheme.git
 cd Annotation-Scheme
@@ -20,12 +20,12 @@ pip install -r requirements.txt
 
 ```
 
-* if you have CUDA installed, run the following (choose your version):
+2. if you have CUDA installed, run the following (choose your version):
 ```bash
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
 ```
 
-* Then, install SAM requirements. More Info [Here](https://github.com/facebookresearch/sam2/blob/main/INSTALL.md)
+3. Then, install SAM requirements. More Info [Here](https://github.com/facebookresearch/sam2/blob/main/INSTALL.md)
 ```bash
 cd segmentanything && \
 pip install -e . && \
