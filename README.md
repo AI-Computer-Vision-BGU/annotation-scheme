@@ -20,6 +20,11 @@ pip install -r requirements.txt
 
 ```
 
+* if you have CUDA installed, run the following (choose your version):
+```bash
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+```
+
 * Then, install SAM requirements. More Info [Here](https://github.com/facebookresearch/sam2/blob/main/INSTALL.md)
 ```bash
 cd segmentanything && \
