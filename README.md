@@ -76,7 +76,8 @@ Here, you can choose to annotate different objects (i.e., Tool & Hands) with con
 
 ![Annotator Demo](assets/annotator.gif)
 
-SAM2 will take these initial bb/point prompts to start annotate the next 50 frames. After finishing -- we will get the following preview to validate the annotations:
+SAM2 will take these initial bb/point prompts to start annotate the next 50 frames automatically. This techniques is repeated untill the last frame.
+After finishing -- we will get the following preview to validate the annotations:
 
 ![Preview](assets/annotator_res.png)
 
