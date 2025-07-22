@@ -81,6 +81,13 @@ After finishing -- we will get the following preview to validate the annotations
 
 ![Preview](assets/annotator_res.png)
 
+
+![Change Class](assets/change_class.gif)
+
+
+![Edit Annotation](assets/edit_bb.gif)
+
+
 ## Stat
 ```bash
 TODO
