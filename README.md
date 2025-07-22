@@ -24,7 +24,7 @@ pip install -r requirements.txt
 ```bash
 cd segmentanything
 pip install -e .
-.checkpoints/download_ckpts.sh    # download the weights for the model
+./checkpoints/download_ckpts.sh    # download the weights for the model
 cd ..
 ```
 
