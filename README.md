@@ -117,12 +117,7 @@ After that, the scheme replays all the annotated fframes so you can accept or re
 </p>
 
 The loop repeats until the last frame is processed.
-
-
-
-
-
-Accepted annotations are written to **YOLO TXT** files (BBs) and **COCO JSON** (tool + hand polygons) under `annotation_results/`.
+Accepted annotations are written to **JSON** file and their corresponding images under `annotation_results/`.
 
 ---
 
