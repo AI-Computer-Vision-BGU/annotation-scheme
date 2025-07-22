@@ -7,8 +7,6 @@ DB_TABLE_NAME = 'MaintenanceActions_metadata'
 # ---------------------------------------- weights path
 sam2_checkpoint_video = 'segmentanything/checkpoints/sam2.1_hiera_tiny.pt'
 model_cfg = "configs/sam2.1/sam2.1_hiera_t.yaml"
-sam_checkpoint_image = 'segmentanything/checkpoints/sam_vit_h_4b8939.pth'
-
 
 # ---------------------------------------- Change based on the object one need to segment
 TOOL_CATEGORIES = ['Hammer', 'Cut', 'Screw', 'Piping', 'Measure']

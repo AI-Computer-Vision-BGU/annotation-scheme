@@ -28,8 +28,9 @@ import os
 import sys
 sys.path.append(os.getcwd())
 from AnnotationScheme.utils.sam2_loader import SAM2_ROOT  # noqa: F401
+from segmentanything.sam2.build_sam import build_sam2
 from segmentanything.sam2.build_sam import (build_sam2_video_predictor)
-from segment_anything import sam_model_registry, SamPredictor
+from segmentanything.sam2.sam2_image_predictor import SAM2ImagePredictor
 from utils import utils
 import configs
 import json
@@ -45,8 +46,7 @@ print(f'Device: {device}')
 
 # INITIALIZE MODELS AND GLOBAL VARIABLES
 sam_video_predictor = build_sam2_video_predictor(configs.model_cfg, configs.sam2_checkpoint_video, device=device)
-sam_model = sam_model_registry["vit_h"](checkpoint=configs.sam_checkpoint_image).to(device)
-sam_predictor = SamPredictor(sam_model)
+sam_predictor = SAM2ImagePredictor(build_sam2(configs.model_cfg, configs.sam2_checkpoint_video, device=device))
 yolo_failed = False
 # these two for initial bounding box
 start_point = None
@@ -519,7 +519,7 @@ def sam_prompt_to_polygons(img_bgr, eps=1.5, min_area=10):
     """
     global sam_predictor, start_point, end_point, tool_hand_segmentation
 
-    sam_predictor.set_image(img_bgr[..., ::-1])
+    sam_predictor.set_image(img_bgr[..., ::-1].copy())
     H, W = img_bgr.shape[:2]
     results = {}
 
