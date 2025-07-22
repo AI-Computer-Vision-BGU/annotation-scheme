@@ -55,14 +55,14 @@ This launches an **interactive wizard** that lets you choose **one of three work
   └── object2/ 
   └── … 
 </pre>
-* **Output**
-  - result directory contains as follow:
+
+The **Output** of both flows as follow
    <pre>
     res/
-    ├── Images
+    ├── Images                # Contains the images
     │ ├── I1.jpg
     │ └── … 
-    └── Annotations.json
+    └── Annotations.json      # Contains the annotation images (COCO format)
 
   </pre>
 
