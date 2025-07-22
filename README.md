@@ -33,8 +33,9 @@ cd ..
 ## Getting Started
 To run the script:
 ```bash
-python AnnotationScheme/annotation_scheme.py
+python AnnotationScheme/annotation_scheme.py --new_shape (680, 340) --weights t
 ```
+you can choose any weights for SAM2 [tiny (t), small (s), base_plus (b), large (l)]
 This launches an **interactive wizard** that lets you choose **one of three workflows**:
 
 #### 1&nbsp;·&nbsp;Annotate a *single* video  
