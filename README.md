@@ -71,7 +71,8 @@ The **Output** of both flows as follow
 The first window will look like this, where you can choose to skip this video ([N] keyword), or exit the program ([X] keyword)
 ![First Window](assets/init_w.png)
 
-To continue to annotate the video, press any keyword (space, enter, etc...)
+To continue to annotate the video, press any keyword (space, enter, etc...) -- This will get you to the annotator scheme.
+Here, you can choose to annotate different objects (i.e., Tool & Hands) with convenient option (1 or 2 to change object -- 'b' to change the prompt from points to bounding box (and vice versa))
 
 
 
