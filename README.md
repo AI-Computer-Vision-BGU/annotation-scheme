@@ -22,9 +22,9 @@ pip install -r requirements.txt
 
 * Then, install SAM requirements. More Info [Here](https://github.com/facebookresearch/sam2/blob/main/INSTALL.md)
 ```bash
-cd segmentanything &&\
-pip install -e . &&\
-./checkpoints/download_ckpts.sh   &&\
+cd segmentanything && \
+pip install -e . && \
+./checkpoints/download_ckpts.sh   && \
 cd ..
 ```
 
