@@ -87,6 +87,61 @@ After finishing -- we will get the following preview to validate the annotations
 
 ![Edit Annotation](assets/edit_bb.gif)
 
+---
+
+
+---
+
+## 🚀  Interactive preview workflow  
+
+### 1 · Initial decision screen  
+The very first pop-up lets you bail out early:
+
+| Key | Action |
+|-----|--------|
+| **N** | Skip this video and move to the next one in the folder |
+| **X** | Exit the entire program |
+
+<p align="center">
+  <img src="assets/init_w.png" width="480" alt="First window – skip or exit">
+</p>
+
+---
+
+### 2 · Annotator GUI  
+Press **any other key** (Space / Enter / click) to jump into the annotator loop.
+
+* **1** → annotate the **tool**  
+* **2** → annotate the **hands**  
+* **b** → toggle between **Bounding-box** mode and **Point-prompt** mode  
+* Draw / click → SAM 2 uses that prompt to propagate over the next **50 frames**  
+
+<p align="center">
+  <img src="assets/annotator.gif" width="640" alt="Live annotation demo">
+</p>
+
+---
+
+### 3 · Preview & validation  
+After each propagation step the scheme replays the segment so you can accept or refine:
+
+| Key | Action |
+|-----|--------|
+| **e** | Edit BB / points on the current frame |
+| **n** | Change the class label |
+| **q** | Quit current video (saves progress) |
+| **x** | Exit the program (saves progress) |
+
+<p align="center">
+  <img src="assets/annotator_res.png" width="640" alt="Preview window">
+</p>
+
+The loop repeats until the last frame is processed.  
+Accepted annotations are written to **YOLO TXT** files (BBs) and **COCO JSON** (tool + hand polygons) under `annotation_results/`.
+
+---
+
+
 
 ## Stat
 ```bash
