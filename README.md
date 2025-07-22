@@ -4,7 +4,7 @@ This repo contains the semi-automatic video annotation pipeline used in our [Mai
 
 
 [![Paper](https://img.shields.io/badge/Paper-PDF-blue.svg)](https://arxiv.org/abs/xxx)
-[![Project](https://img.shields.io/badge/Project-GitHub-brightgreen.svg)](https://github.com/YourOrg/Annotation-Scheme)
+[![MMTL](https://img.shields.io/badge/Project-GitHub-brightgreen.svg)]([https://github.com/YourOrg/Annotation-Scheme](https://github.com/AI-Computer-Vision-BGU/MMTL))
 [![Demo](https://img.shields.io/badge/Demo-YouTube-red.svg)](https://youtu.be/your-video)
 
 
