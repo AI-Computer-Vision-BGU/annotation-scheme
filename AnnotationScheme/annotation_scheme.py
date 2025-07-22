@@ -66,7 +66,7 @@ yolo_failed = False
 # right click for points to segment, left point for excluded segmentation
 segment_by_points = True
 # this is for the tool hand segmentation. 1- tool, 2- hand
-active_prompt = '1'        # '1' → tool, '2' → hand
+active_prompt = '1'
 tool_hand_segmentation = {
     '1': {'include_points':[], 'exclude_points':[], 'start_point': None, 'end_point': None},
     '2': {'include_points':[], 'exclude_points':[], 'start_point': None, 'end_point': None}
@@ -168,9 +168,6 @@ def add_manually_bb(frame_image, mode='regular'):
             else:
                 cv2.rectangle(frame_vis, tuple(tool_hand_segmentation[active_prompt]['start_point']), tuple(cursor_pos), (0, 255, 0), 2)
 
-        # if mode == 'review':
-        #     cv2.waitKey(0)  # wait for 1 ms to update the window
-        #     break
         # --- overlay current mode on a copy so user sees it live
         mode_text = "TOOL" if active_prompt == '1' else "HAND"
         edit_mode_text = "BB" if not segment_by_points else "Points"
@@ -211,7 +208,7 @@ def run_preview(preview_path, tool_bbs, tool_segs=None, hand_segs=None, new_shap
     :param tool_bbs: mapping of frame index to bounding box coordinates
     :return:
     """
-    global segment_by_points, winname, start_point, end_point
+    global segment_by_points, winname
     if save_vis:
         if not os.path.exists(os.path.join(preview_path, 'vis')):
             os.makedirs(os.path.join(preview_path, 'vis'))
@@ -620,7 +617,7 @@ def annotate_all_video_manually(v_path, curr_tool_output_path=None,
     :param n: number of samples to choose
     :return:
     """
-    global winname, image_copy, start_point, end_point, clean_state
+    global winname, image_copy, clean_state
     vid_name = os.path.split(v_path)[-1].split('.')[0]
     if curr_tool_output_path is None:
         sub_root_saved_path = os.path.join(curr_tool_output_path, f'{vid_name}')
@@ -705,7 +702,7 @@ def annotate_video_using_sam(args,
     @param debug: whether to debug the algorithm steps
     @return tool_bbs, hands_segmentations: a dict for each frame the bbs and hand seg.
     """
-    global winname, image_copy, start_point, end_point, clean_state, segment_by_points, next_video, tool_hand_segmentation
+    global winname, image_copy, clean_state, segment_by_points, next_video, tool_hand_segmentation
     v_path = args.video_path
     segment_by_points = True
     vid_name = os.path.split(v_path)[-1].split('.')[0]
@@ -771,7 +768,11 @@ def annotate_video_using_sam(args,
 
             # Stage 2: apply SAM2 on the manually bb
             if debug:
-                print(f' > bb: {[start_point, end_point]} - include points: {include_points} - exclude_points: {exclude_points}')
+                for obj_id in tool_hand_segmentation.keys():
+                    print(f'{obj_id}: ')
+                    for stream in tool_hand_segmentation[obj_id]:
+                        print(f' > {stream}: {tool_hand_segmentation[obj_id][stream]}')
+
             print(f' > SAM FOR : {indices} - {indices[0]} - {indices[-1]}')
             cv2.waitKey(1)
             cv2.destroyAllWindows()
