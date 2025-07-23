@@ -6,3 +6,5 @@ __pycache__/annotation_results/
 annotation_results/
 *.py[cod]
 results_coco_format/images/
+.DS_Store
+results_coco_format/*.pkl

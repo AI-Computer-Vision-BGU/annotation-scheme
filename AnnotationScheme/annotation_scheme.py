@@ -720,7 +720,7 @@ def annotate_video_using_sam(args,
             utils.video_to_frames_slow(v_path, frame_paths)   # change this to video_to_frames
         frame_names = [
             p for p in os.listdir(frame_paths)
-            if os.path.splitext(p)[-1] in [".jpg", ".jpeg", ".JPG", ".JPEG"]
+            if os.path.splitext(p)[-1] in [".jpg", ".jpeg", ".JPG", ".JPEG", ".png"]
         ]
         frame_names.sort(key=lambda p: int(os.path.splitext(p)[0]))
 
