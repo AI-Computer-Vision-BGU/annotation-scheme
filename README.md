@@ -63,7 +63,7 @@ The **Output** of both flows as follow
     ├── Images                # Contains the images
     │ ├── I1.jpg
     │ └── … 
-    └── Annotations.json      # Contains the annotation.json fuck you   (COCO format)
+    └── Annotations.json      # Contains the annotation.json (COCO format)
 
   </pre>
 
