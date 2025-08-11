@@ -16,7 +16,7 @@ This repo contains the semi-automatic video annotation pipeline used in our [Mai
 ```bash
 git clone --recursive https://github.com/AI-Computer-Vision-BGU/Annotation-Scheme.git
 cd Annotation-Scheme
-pip install -r requirements.txt
+pip install -r requirments.txt
 
 ```
 
