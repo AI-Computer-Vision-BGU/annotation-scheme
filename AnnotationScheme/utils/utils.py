@@ -15,6 +15,8 @@ from prompt_toolkit.completion import PathCompleter
 from copy import deepcopy
 from tqdm import tqdm
 import pickle
+import re
+import bitarray
 
 #########################################################
 #                  Visualization                        #
@@ -384,7 +386,7 @@ def save_open_video_names_as_pickles(set_, path="done_video_names.pkl", op='save
     # Save to file
     if op == 'save':
         with open(path, "wb") as f:
-            pickle.dump(set_, f)
+            pickle.dump(set_, f, protocol=pickle.HIGHEST_PROTOCOL)
         return None
     
     if op == 'open':
@@ -393,9 +395,10 @@ def save_open_video_names_as_pickles(set_, path="done_video_names.pkl", op='save
                 loaded_set = pickle.load(f)
 
             return loaded_set
+        
         except FileNotFoundError as e:
             print(' File not found: {path} - {e}')
-            return set()
+            return {}
 
 
 def load_coco_annotations(json_path):
@@ -650,9 +653,10 @@ def video_to_frames_slow(video_path, output_path):
     success, frame = cap.read()
     while success:
         filename = os.path.join(output_path, f"{frame_idx:05d}.jpg")
+        # if frame_idx % 3 == 0:
         cv2.imwrite(filename, frame)
         frame_idx += 1
-        if frame_idx % 10 == 0:  # TO DELETE!
+        if frame_idx % 60 == 0:  # TO DELETE!
             break
         pbar.update(1)
         success, frame = cap.read()
@@ -680,15 +684,38 @@ def initial_working_dir(output_frames_path, frame_names, current_working_file, i
     return np.array(frame_names)[indcies]
 
 
-def find_range(curr_i, frames, range_step=50, total_indices=20):
+def find_range(curr_i, n, bit_state=None, range_step=50, total_indices=20):
     """
-    every range space should contain 50 images per time except last range that contains > 50 < 100
+    every range space should contain $range_step$ images per time except last range that contains > 50 < 100
+    @param bit_state: bit trace of the done frame. i.e., 00011111 (the first three frames are not annotated) 
+    10
+    12345
+    00000000000
     """
-    n = len(frames)
-    if curr_i + range_step < n:
-        return range(curr_i,
-                     curr_i + range_step)  # select_random_indices(range(curr_i, curr_i + range_step), total_indices)
-    return range(curr_i, n)  # select_random_indices(range(curr_i, n), total_indices)
+    # print(f' ------ {bit_state}')
+    m = re.search(r'0+', bit_state.to01())
+    if m.start() == curr_i and m.end() - m.start() < range_step:
+        return range(m.start(), m.end())
+    
+    if m.end() - m.start() > 0 and curr_i <= m.end() and m.end() <= range_step:
+        return range(curr_i, m.end())
+
+    else:
+        if curr_i + range_step < n:
+            return range(curr_i,
+                        curr_i + range_step)  # select_random_indices(range(curr_i, curr_i + range_step), total_indices)
+        return range(curr_i, n)  # select_random_indices(range(curr_i, n), total_indices)
+
+
+def ensure_bitset(state, video_name, n_frames):
+    """Return bitarray for video, creating or expanding it if necessary."""
+    if video_name not in state:
+        state[video_name] = bitarray(n_frames)
+        state[video_name].setall(False)
+    elif len(state[video_name]) < n_frames:          # video re-encoded?
+        extra = n_frames - len(state[video_name])
+        state[video_name].extend([False]*extra)
+    return state[video_name]
 
 
 def select_random_indices(indices, total=20):
@@ -757,6 +784,38 @@ def suppress_output():
             sys.stderr = old_stderr
 
 
+def no_point_selected_by_user(point_prompts=None):
+
+    if point_prompts == None:
+        return True
+
+    for obj_id, streams in point_prompts.items():
+        for stream in streams.keys():
+            if 'inc' in stream or 'exc' in stream:
+                if streams[stream] != []:
+                    return False
+            else:
+                if streams[stream] is not None:
+                    return False
+    
+    return True
+
+
+def _yes_no(prompt, default=False):
+    """
+    Ask a yes/no question on stdin and return True/False.
+    Empty input returns the default.
+    """
+    while True:
+        ans = input(f"{prompt} [{'Y/n' if default else 'y/N'}]: ").strip().lower()
+        if not ans:
+            return default
+        if 'y' in ans.lower():
+            return True
+        if 'n' in ans.lower():
+            return False
+        print("  ➜ Please answer with y / n")
+    
 #########################################################
 #               FILES Functionality                  #
 #########################################################

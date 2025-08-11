@@ -11,8 +11,13 @@ it works as follows:
  
  UPDATES:
   13/07/2025 -- added annotations for hand segmentations by asking user in real-time to choose points for hands or tool (or both)
+  23/07/2025 -- if we save the coco images as vidname_numeric.jpg, then we can track for every video the done *frames* rather than
+                the video name...
 
 # TODO:
+  1. in preview -- show the skipped/previous annotations (if someone wants to reannotate)
+  2. add automate hand segmentations -- intergrate egoHOS
+  3. add delete keywords in preview to delete annoying mis-segmnetation
 
 SEARCH WORDS IN THIS FILE FOR EDITTING/FIXING:
 1. MOVE
@@ -36,6 +41,8 @@ from types import SimpleNamespace
 import cv2
 import numpy as np
 import argparse
+from bitarray import bitarray
+import atexit
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -201,7 +208,7 @@ def reset_globals():
                 tool_hand_segmentation[obj_id][stream] = None
 
 
-def run_preview(preview_path, tool_bbs, tool_segs=None, hand_segs=None, new_shape=(640, 360), milli=0, save_vis=False):
+def run_preview(args, preview_path, tool_bbs, tool_segs=None, hand_segs=None, new_shape=(640, 360), milli=0, save_vis=False):
     """
     Run the result of the bounding boxes with a choice to edit
     :param preview_path: path to MP4 bb r esult
@@ -263,12 +270,13 @@ def run_preview(preview_path, tool_bbs, tool_segs=None, hand_segs=None, new_shap
             # TODO -- also, save here the annotation before existing.
             cv2.destroyAllWindows()
             utils.save_coco_annotations(args.annotations, os.path.join(args.coco_data, 'annotations.json'))
-            utils.save_open_video_names_as_pickles(args.done_video_names, path=os.path.join(args.coco_data, 'done_video_names.pkl'), op='save')
+            utils.save_open_video_names_as_pickles(args._progress_state, path=os.path.join(args.coco_data, 'done_video_names.pkl'), op='save')
             return
         
         if key in (ord('x'),):  # Quit the program
             cv2.destroyAllWindows()
             sys.exit()
+
 
         if key in (ord('e'),):  # EDIT BB
             reset_globals() 
@@ -276,8 +284,8 @@ def run_preview(preview_path, tool_bbs, tool_segs=None, hand_segs=None, new_shap
             cv2.putText(clean_frame_img, f'{frame_idx}/{total_frames-1}', (configs.x_offset, 30), cv2.FONT_HERSHEY_SIMPLEX,
                     1.2, (255, 255, 0), 3, cv2.LINE_AA)
             add_manually_bb(clean_frame_img, mode='review')
-            results = sam_prompt_to_polygons(clean_frame_img, eps=1.5, min_area=10)
-            if results:
+            if not utils.no_point_selected_by_user(tool_hand_segmentation):
+                results = sam_prompt_to_polygons(clean_frame_img, eps=1.5, min_area=10)
                 if "tool" in results:
                     tool_bbs[f'{frame_idx}'] = results["tool"]["bbox"]
                     tool_segs[f'{frame_idx}'] = results["tool"]["segs"]
@@ -289,8 +297,10 @@ def run_preview(preview_path, tool_bbs, tool_segs=None, hand_segs=None, new_shap
             else:
                 tool_bbs[f"{frame_idx}"] = [[]]  # mark skipped
                 tool_segs[f"{frame_idx}"] = [[]]  # mark skipped
-                print(f" [*] Skipped frame {frame_idx}")
-
+                hand_segs[f"{frame_idx}"] = []
+                args._progress_state[args.vid_name][frame_idx] = False
+                print(f"   [*] Skipped frame {frame_idx}")
+                
             cv2.destroyAllWindows()
             continue
 
@@ -315,11 +325,11 @@ def run_preview(preview_path, tool_bbs, tool_segs=None, hand_segs=None, new_shap
             while True:
                 user_choice = utils.ask_class(image_with_classes, max_id=12, prompt_win=winname, x_offset=configs.x_offset, selected_class=selected_class)
                 if user_choice < 0 or user_choice >= len(configs.category_id_to_name):
-                    print(" [!] Invalid class. Please select a valid category.")
+                    print("   [!] Invalid class. Please select a valid category.")
                     continue
                 else:
                     if user_choice != selected_class:
-                        print(f" [*] Updated category to {configs.category_id_to_name[user_choice]}")
+                        print(f"   [*] Updated category to {configs.category_id_to_name[user_choice]}")
                         selected_class = user_choice
                     frame_idx -= 1 # Go back to the same frame
                     break
@@ -327,7 +337,7 @@ def run_preview(preview_path, tool_bbs, tool_segs=None, hand_segs=None, new_shap
 
         elif key in (ord('a'), 13, 32):  # Accept the current BB
             if selected_class == -1:
-                print(" [!] No category selected. Please select a category.")
+                print("   [!] No category selected. Please select a category.")
                 # frame_idx -= 1  # Go back to the same frame
                 continue
             else:
@@ -355,6 +365,7 @@ def run_preview(preview_path, tool_bbs, tool_segs=None, hand_segs=None, new_shap
                         "hand_segmentation": [],
                     })
                     ann_id += 1
+                    args._progress_state[args.vid_name][frame_idx] = True
                 if f'{frame_idx}' in hand_segs and hand_segs[f'{frame_idx}']:  # add hands
                     # print(f" Accepted hand segmentations for frame {frame_idx}")
                     annotations.append({
@@ -373,11 +384,13 @@ def run_preview(preview_path, tool_bbs, tool_segs=None, hand_segs=None, new_shap
                     ann_id += 1
                     img_id += 1
                     img_id_indicator = True
+                    args._progress_state[args.vid_name][frame_idx] = True
+
                     
                 else:
                     if not img_saved:
                         # allow the user to see that this bb is indeed -1
-                        print(f" [!] Discard BB for frame {frame_idx}: {tool_bbs[f'{frame_idx}']}")
+                        print(f"   [!] Discard BB for frame {frame_idx}: {tool_bbs[f'{frame_idx}']}")
                 
                 if not img_id_indicator and img_saved:
                     img_id += 1
@@ -386,6 +399,9 @@ def run_preview(preview_path, tool_bbs, tool_segs=None, hand_segs=None, new_shap
         frame_idx += 1
 
     
+    if not images and not annotations:
+        return
+
     # First, ask user if he want to discard annotations
     question_img = orig_frame_img.copy()
     cv2.putText(question_img, "Remove bbs? (y/n)", (1280//2, 720//6), cv2.FONT_HERSHEY_SIMPLEX,
@@ -397,6 +413,8 @@ def run_preview(preview_path, tool_bbs, tool_segs=None, hand_segs=None, new_shap
     while True:
         key = cv2.waitKey(0)
         if key in (ord('y'), ord('Y')):
+            args._progress_state[args.vid_name].setall(False)
+            print(f' [@] Deleted the annotations')
             cv2.destroyAllWindows()
             break
         elif key in (ord('n'), ord('N')):
@@ -705,9 +723,8 @@ def annotate_video_using_sam(args,
     global winname, image_copy, clean_state, segment_by_points, next_video, tool_hand_segmentation
     v_path = args.video_path
     segment_by_points = True
-    vid_name = os.path.split(v_path)[-1].split('.')[0]
     if curr_tool_output_path is None: # wrong here, fix
-        sub_root_saved_path = os.path.join(curr_tool_output_path, f'{vid_name}')
+        sub_root_saved_path = os.path.join(curr_tool_output_path, f'{args.vid_name}')
     else:
         sub_root_saved_path = curr_tool_output_path
 
@@ -734,23 +751,29 @@ def annotate_video_using_sam(args,
     skipped_frames = {}  # none annotated frames
     i = 0
     last_detected_frame = i
-    total_frames = len(frame_names) - 1
-    winname = f'{vid_name}'
-
+    total_frames = len(frame_names)
+    # ----- init progress state for this video
+    args._progress_state[args.vid_name] = utils.ensure_bitset(args._progress_state, args.vid_name, total_frames)
+    winname = f'{args.vid_name} - # Unannotated Frames - {args._progress_state[args.vid_name].count(False)}/{total_frames}'
     utils.place_window(winname, winnsize=configs.winnsize)  # Place the window at the top-left corner
-
-    while i < total_frames:
+    while i < total_frames - 1:
         reset_globals()
-        # Prepare the current window of frames
-        indices = utils.find_range(i, frame_names, range_step=args.repeat)
-        if debug:
-            print(f' > Starting with {indices[0]} - {indices[-1]}/{len(indices)} frames from {len(frame_names)} frames')
-
+        # print(f' ------- {args._progress_state}')
         if extract_tool:
             # Stage 1: point prompts or manual annotation
             frame_number = int(frame_names[i].split('.')[0])
+            if args._progress_state[args.vid_name][frame_number]:
+                last_detected_frame = i
+                i += 1
+                continue
+            
+            # Prepare the current window of frames
+            indices = utils.find_range(i, total_frames, bit_state=args._progress_state[args.vid_name], range_step=args.repeat)
+            if debug:
+                print(f'   > Starting with {indices[0]} - {indices[-1]}/{len(indices)} frames from {len(frame_names)} frames')
+
             frame_image = cv2.imread(os.path.join(frame_paths, frame_names[i]))
-            cv2.putText(frame_image, f'{i}/{total_frames}', (configs.x_offset, 30), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 0, 0), 2, cv2.LINE_AA)
+            cv2.putText(frame_image, f'Annotating {indices[0]} - {indices[-1]}/{total_frames-1}', (configs.x_offset, 30), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 0, 0), 2, cv2.LINE_AA)
             
             ask_user, last_detected_frame = locate_tool_from_frame(frame_image,
                                                                    last_detected_frame,
@@ -760,7 +783,7 @@ def annotate_video_using_sam(args,
                 cv2.destroyAllWindows()
                 return
 
-            if (len(tool_hand_segmentation['1']['include_points']) == 0 and len(tool_hand_segmentation['2']['include_points']) == 0) and (start_point is None or end_point is None):
+            if utils.no_point_selected_by_user(tool_hand_segmentation):
                 skipped_frames[f'{i}'] = [[-1, -1, -1, -1]]
                 i += 1
                 continue
@@ -773,12 +796,14 @@ def annotate_video_using_sam(args,
                     for stream in tool_hand_segmentation[obj_id]:
                         print(f' > {stream}: {tool_hand_segmentation[obj_id][stream]}')
 
-            print(f' > SAM FOR : {indices} - {indices[0]} - {indices[-1]}')
+            print(f'   > SAM FOR : {indices[0]} - {indices[-1]}')
             cv2.waitKey(1)
             cv2.destroyAllWindows()
             # cv2.waitKey(1)
             curr_frame_names = utils.initial_working_dir(frame_paths, frame_names, current_working_file, indcies=indices)
-
+            # update the state:
+            for idx in indices:
+                args._progress_state[args.vid_name][idx] = True
             video_segments = second_stage(sam_video_predictor, current_working_file, 0)
             video_segments = {k + i: v for k, v in video_segments.items()}
             combined_video_segments = {**combined_video_segments, **video_segments}
@@ -796,7 +821,7 @@ def annotate_video_using_sam(args,
 
     # to ensure the correct annotation, run a preview and edit the one that needed to editted.
     if preview_before_save:
-        run_preview(sub_root_saved_path, tool_bbs, tool_segs, hand_segs, save_vis=args.save_visualization)
+        run_preview(args, sub_root_saved_path, tool_bbs, tool_segs, hand_segs, save_vis=args.save_visualization)
 
     if args.save_visualization:
         utils.reset_working_dir(frame_paths, delete_=True)
@@ -991,8 +1016,6 @@ def annotator(args, fixer=False):
     elif args.directory_path:
         tool_categories = [tool_cat for tool_cat in os.listdir(args.directory_path) if '.DS_' not in tool_cat ]#and tool_cat in configs.CATEGORIES]
         for tool_category in tool_categories:
-            if tool_category in configs.NONE_TOOL_CATEGORIES:
-                continue
             print(f'Annotating {tool_category} videos')
             args.curr_tool_id = args.category_id_mapping[tool_category] if tool_category in args.category_id_mapping else -1
             videos = [vid for vid in os.listdir(os.path.join(args.directory_path, tool_category)) if vid.endswith(('.mp4', '.MP4', '.mov'))]
@@ -1000,7 +1023,8 @@ def annotator(args, fixer=False):
                 video_path = os.path.join(args.directory_path, tool_category, video)
                 args.video_path = video_path
                 vid_name = os.path.split(video_path)[-1].split('.')[0]
-                if vid_name in args.done_video_names:
+                if vid_name in args._progress_state and args._progress_state[vid_name].all():
+                    print(f' > Already Annotated Video -- {vid_name}')
                     continue
                 args.vid_name = vid_name
                 curr_tool_output_path = os.path.join(args.output_dir, vid_name)
@@ -1018,21 +1042,6 @@ def annotator(args, fixer=False):
         fix_annotations(args)
 
 
-def _yes_no(prompt, default=False):
-    """
-    Ask a yes/no question on stdin and return True/False.
-    Empty input returns the default.
-    """
-    while True:
-        ans = input(f"{prompt} [{'Y/n' if default else 'y/N'}]: ").strip().lower()
-        if not ans:
-            return default
-        if ans in {"y", "yes", "Y", "Yes", "YES"}:
-            return True
-        if ans in {"n", "no", "N", "No", "NO"}:
-            return False
-        print("  ➜ Please answer with y / n")
-    
 
 def ask_user_for_run_config():
     """
@@ -1072,17 +1081,18 @@ def ask_user_for_run_config():
         tracker=None,
         coco_data=None,
         done_video_names=None,
+        _progress_state={},
         save_visualization=False,
     )
 
     # ---------------------------------------------- single video
     if mode == "1":                               
         args.video_path = utils.input_with_path_completion("Full path to video: ")
-        args.manually = _yes_no("Annotate manually (skip SAM2)?", default=False)
+        args.manually = utils._yes_no("Annotate manually (skip SAM2)?", default=False)
         od = utils.input_with_path_completion(f'Output directory (default: {args.output_dir}): ')
         if od:
             args.output_dir = od
-        args.save_visualization = _yes_no("Save visualization results?", default=False)
+        args.save_visualization = utils._yes_no("Save visualization results?", default=False)
 
     # ---------------------------------------------- Directory
     elif mode == "2":                            
@@ -1090,8 +1100,8 @@ def ask_user_for_run_config():
         while not os.path.exists(args.directory_path):
             print(f'[!] Invalid Path')
             args.directory_path = utils.input_with_path_completion(f"Directory path (current dir is - {os.getcwd()}): ")
-        args.manually = _yes_no("Annotate manually (skip SAM2)?", default=False)
-        args.save_visualization = _yes_no("Save visualization results?", default=False)
+        args.manually = utils._yes_no("Annotate manually (skip SAM2)?", default=False)
+        args.save_visualization = utils._yes_no("Save visualization results?", default=False)
         args.new_shape = args_parser.new_shape # default shape for the video frames
         args.coco_data = utils.input_with_path_completion(f"Saved directory path (will be saved under - {os.getcwd()}): ")
         if args.coco_data == '':
@@ -1116,18 +1126,19 @@ def ask_user_for_run_config():
             with open(os.path.join(args.coco_data, 'annotations.json'), 'w') as f:
                 json.dump(args.annotations, f, indent=4)
             args.done_video_names = set()
-        else:
+        else:  # add _progress_state here
             with open(os.path.join(args.coco_data, 'annotations.json'), 'r') as f:
                 args.annotations = json.load(f)
             # extract all names of video
             if os.path.exists(os.path.join(args.coco_data, "done_video_names.pkl")):
-                args.done_video_names = utils.save_open_video_names_as_pickles(None, path=os.path.join(args.coco_data, "done_video_names.pkl"), op='open')
-            else:
-                args.done_video_names = set([fname['file_name'].split('_')[0] for fname in args.annotations['images']])
+                args._progress_state = utils.save_open_video_names_as_pickles(None, path=os.path.join(args.coco_data, "done_video_names.pkl"), op='open')
+            # else:
+            #     args.done_video_names = set([fname['file_name'].split('_')[0] for fname in args.annotations['images']])
 
+        atexit.register(lambda: utils.save_open_video_names_as_pickles(args._progress_state, path=os.path.join(args.coco_data, 'done_video_names.pkl'), op='save'))
         args.category_id_mapping = {cat['name'].lower(): cat['id'] for cat in args.annotations['categories']}
         args.id_category_mapping = {cat['id']: cat['name'].lower() for cat in args.annotations['categories']}
-
+        print(f' ------ {args._progress_state}')
     # ---------------------------------------------- Fixer
     elif mode == "3":
         args.fixer = True
@@ -1152,4 +1163,5 @@ if __name__ == "__main__":
     args = ask_user_for_run_config()
     annotator(args)
     if args.coco_data is not None:
-        utils.save_open_video_names_as_pickles(args.done_video_names, path=os.path.join(args.coco_data, 'done_video_names.pkl'), op='save')
+        utils.save_open_video_names_as_pickles(args._progress_state, path=os.path.join(args.coco_data, 'done_video_names.pkl'), op='save')
+    
