@@ -39,6 +39,7 @@ category_id_to_name = {
                         10: "hands",
                         11: "saw",
                         12: "elctric screwdriver",
+                        13: "None",
     }
 
 device_to_id_mapping = {
@@ -47,6 +48,7 @@ device_to_id_mapping = {
     2: "Tablet",
     3: "Washer",
     4: "Dryer",
+    5: "Refrigerator",
 }
 
 OBJECT_CLASSES = {

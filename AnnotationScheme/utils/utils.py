@@ -18,6 +18,8 @@ import pickle
 import re
 import bitarray
 import configs
+import imageio_ffmpeg
+ffmpeg_path = imageio_ffmpeg.get_ffmpeg_exe()
 
 #########################################################
 #                  Visualization                        #
@@ -647,7 +649,7 @@ def video_to_frames(video_path, output_path):
 
     # Build the ffmpeg command
     command = [
-        "ffmpeg",
+        ffmpeg_path,
         "-loglevel", "error",  # Suppress all non-error messages
         "-i", video_path,  # Input video file
         "-q:v", "2",  # Set output quality; lower is better (range is roughly 2–31)
@@ -685,8 +687,8 @@ def video_to_frames_slow(video_path, output_path):
         # if frame_idx % 3 == 0:
         cv2.imwrite(filename, frame)
         frame_idx += 1
-        if frame_idx % 10 == 0:  # TO DELETE!
-            break
+        # if frame_idx % 10 == 0:  # TO DELETE!
+        #     break
         pbar.update(1)
         success, frame = cap.read()
 
@@ -717,9 +719,7 @@ def find_range(curr_i, n, bit_state=None, range_step=50, total_indices=20):
     """
     every range space should contain $range_step$ images per time except last range that contains > 50 < 100
     @param bit_state: bit trace of the done frame. i.e., 00011111 (the first three frames are not annotated) 
-    10
-    12345
-    00000000000
+    
     """
     # print(f' ------ {bit_state}')
     m = re.search(r'0+', bit_state.to01())
