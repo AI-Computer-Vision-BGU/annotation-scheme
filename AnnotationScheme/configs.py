@@ -14,7 +14,15 @@ config_weights_mapping = {
 
 
 
-# ---------------------------------------- Change based on the object one need to segment
+# ---------------------------------------- CHANGE based on the object one need to segment
+OBJECT_TO_ANNOTATE = {'TOOL': 10, 'HAND': 20, 'DEVICE': 30}  # object name and unique id
+OBJECT_COLORS = {
+        'TOOL': (255, 255, 0),  # tool - blue
+        'HAND': (255, 0, 255),  # hand - pink
+        'DEVICE': (0, 255, 128)  # device - green
+}
+OBJECT_TO_ANNOTATE_REVERSED = {v: k for k, v in OBJECT_TO_ANNOTATE.items()}  # reverse mapping
+OBJECT_WITH_BB = ['TOOL', 'DEVICE']                          # objects that need bounding box
 TOOL_CATEGORIES = ['Hammer', 'Cut', 'Screw', 'Piping', 'Measure']
 NONE_TOOL_CATEGORIES = ['Attach', 'Click', 'Cover', 'OpenClose', 'Plug']
 category_id_to_name = {
@@ -30,7 +38,22 @@ category_id_to_name = {
                         9: "wrench",
                         10: "hands",
                         11: "saw",
+                        12: "elctric screwdriver",
     }
+
+device_to_id_mapping = {
+    0: "PC",
+    1: "Laptop",
+    2: "Tablet",
+    3: "Washer",
+    4: "Dryer",
+}
+
+OBJECT_CLASSES = {
+    'TOOL': category_id_to_name,
+    'HAND': {},
+    'DEVICE': device_to_id_mapping,
+}
 
 # ---------------------------------------- UI Setup
 COLORS = {

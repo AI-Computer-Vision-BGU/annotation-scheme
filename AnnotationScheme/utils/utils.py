@@ -17,6 +17,7 @@ from tqdm import tqdm
 import pickle
 import re
 import bitarray
+import configs
 
 #########################################################
 #                  Visualization                        #
@@ -95,33 +96,36 @@ def extract_annotations(success_indices,
     EDIT -- No need to save each image with bb, only extract bbs as dictionary
     """
     success_indices = list(chain.from_iterable(success_indices))
-    tool_bbs = {}  # mapping between frame index to tool bb
-    tool_segs = {}
-    hand_segs = {}
+    results = {obj: {'bb': {}, 'seg': {}} for obj in configs.OBJECT_TO_ANNOTATE.keys()}
+    reversed_objects_to_annotate = {v: k for k, v in configs.OBJECT_TO_ANNOTATE.items()}
     for out_frame_idx in success_indices:
         try:
-            tool_bbs[f'{out_frame_idx}'] = []  # default value if no bb found
-            hand_segs[f'{out_frame_idx}'] = []  # default value if no bb found
+            for obj in results.keys():  # Initialize empty lists for each frame
+                results[obj]['bb'][f'{out_frame_idx}'] = []
+                results[obj]['seg'][f'{out_frame_idx}'] = []
+                results[obj]['bb']['class_name'] = None
+
             for out_obj_id, out_mask in combined_video_segments[out_frame_idx].items():
                 out_mask = np.array(out_mask[0]).astype(np.uint8)
                 out_mask = np.stack((out_mask, out_mask, 255 * out_mask), axis=-1)
-                if out_obj_id == 10:  # tool
-                    bb_coco, bb_yolo, segs = draw_bb(out_mask, draw=True, mode='tool')
+                out_obj_name = reversed_objects_to_annotate[out_obj_id]
+                if out_obj_name in configs.OBJECT_WITH_BB:     # With BB
+                    bb_coco, bb_yolo, segs = draw_bb(out_mask, include_bb=True, shape=None)
                     if format == 'coco':
-                        tool_bbs[f'{out_frame_idx}'].append(bb_coco)
+                        results[out_obj_name]['bb'][f'{out_frame_idx}'].append(bb_coco)
                     elif format == 'yolo':
-                        tool_bbs[f'{out_frame_idx}'].append(bb_yolo)
-                    tool_segs[f'{out_frame_idx}'] = segs
+                        results[out_obj_name]['bb'][f'{out_frame_idx}'].append(bb_yolo)
+                    results[out_obj_name]['seg'][f'{out_frame_idx}'] = segs
 
-                elif out_obj_id == 20:  # hand
-                    _, _, segs = draw_bb(out_mask, draw=True, mode='hands')
-                    hand_segs[f'{out_frame_idx}'].append(segs)
+                else:                                          # With only segmentations 
+                    _, _, segs = draw_bb(out_mask, include_bb=False, shape=None)
+                    results[out_obj_name]['seg'][f'{out_frame_idx}'] = segs
 
         except Exception as e:
             print(f' > utils/visualzie_annotations() - frame: {out_frame_idx} Error: {e}')
             continue
 
-    return tool_bbs, tool_segs, hand_segs
+    return results
 
 
 def place_window(winname, winnsize=(1280, 720)):
@@ -281,7 +285,7 @@ def draw_bb_from_4p(img, box, text=None, tool_label=None):
     return img
 
 
-def draw_bb(out_mask, draw=True, shape=None, mode='tool'):
+def draw_bb(out_mask, include_bb=True, shape=None):
     MIN_AREA = 100
     out_mask = out_mask[:, :, 0]
     orig_h, orig_w = out_mask.shape
@@ -307,7 +311,7 @@ def draw_bb(out_mask, draw=True, shape=None, mode='tool'):
             x_max = max(x_max, x + w)
             y_max = max(y_max, y + h)
         
-        if mode == 'hands':
+        if not include_bb:
             return _, _, segs
         combined_x, combined_y = x_min, y_min
         combined_w, combined_h = x_max - x_min, y_max - y_min
@@ -331,7 +335,7 @@ def draw_bb(out_mask, draw=True, shape=None, mode='tool'):
     return out_mask, None, None
 
 
-def ask_class(img, max_id, prompt_win=None, x_offset=20, selected_class=-1):
+def ask_class(img, max_id, prompt_win=None, x_offset=20):
     """
     Repeatedly reads keystrokes in a cv2 window until the user presses
     Enter/Space, then returns the integer class-id.
@@ -358,8 +362,8 @@ def ask_class(img, max_id, prompt_win=None, x_offset=20, selected_class=-1):
         if key in (27, ord('q')):    # Esc or 'q'
             return -1
 
-        if key in (ord('n'), ord('N')) and selected_class != -1:
-            return selected_class
+        if key in (ord('n'), ord('N')):
+            return -10
 
         # ---------- accumulate digits --------------------------------
         if ord('0') <= key <= ord('9'):
@@ -368,11 +372,36 @@ def ask_class(img, max_id, prompt_win=None, x_offset=20, selected_class=-1):
                 # Optional: show the partial number on the image
                 vis = img.copy()
                 cv2.putText(vis, f"Class id: {typed}",
-                            (x_offset, 125), cv2.FONT_HERSHEY_SIMPLEX,
+                            (x_offset, 145), cv2.FONT_HERSHEY_SIMPLEX,
                             1.2, (0, 0, 255), 2, cv2.LINE_AA)
                 cv2.imshow(prompt_win, vis)
 
 
+
+def build_classes_list(image_with_classes, init_class):
+    """ 
+    Build a list of classes and display it on the image.
+    """
+    mapping_id_names = configs.OBJECT_CLASSES[init_class]
+    cv2.putText(image_with_classes, f"Category (press [n] to change):   {init_class}", (configs.x_offset, 110), cv2.FONT_HERSHEY_SIMPLEX,
+            0.95, configs.OBJECT_COLORS[init_class], 2, cv2.LINE_AA)
+    y_offset = 185
+    class_instr_lines = []
+    class_instr = ""
+    for cid, cname in mapping_id_names.items():
+        class_instr += f"[{cid}] {cname}   "
+        # if cid % 3 == 2:
+        class_instr_lines.append(class_instr.strip())
+        class_instr = ""
+    if class_instr:
+        class_instr_lines.append(class_instr.strip())
+    
+    for line in class_instr_lines:
+        cv2.putText(image_with_classes, line, (configs.x_offset, y_offset),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1.2, configs.OBJECT_COLORS[init_class], 2, cv2.LINE_AA)
+        y_offset += 50
+    
+    return image_with_classes, mapping_id_names
 #########################################################
 #          Coco Annotations Functionallity              #
 #########################################################
@@ -444,8 +473,8 @@ def draw_cocoBB_from_dict(img_np, annotations, class_name, color=(0, 255, 0), or
         x, y, w, h = x * scale_x, y * scale_y, w * scale_x, h * scale_y
         x1, y1, x2, y2 = int(x), int(y), int(x + w), int(y + h)
         # class_name = category_id_to_name.get(ann['category_id'], "Unknown")
-        cv2.rectangle(img_np, (x1, y1), (x2, y2), (0, 255, 0), 2)
-        cv2.putText(img_np, class_name, (x1, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+        cv2.rectangle(img_np, (x1, y1), (x2, y2), color, 2)
+        cv2.putText(img_np, class_name, (x1, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
     return img_np
 
 
@@ -656,7 +685,7 @@ def video_to_frames_slow(video_path, output_path):
         # if frame_idx % 3 == 0:
         cv2.imwrite(filename, frame)
         frame_idx += 1
-        if frame_idx % 60 == 0:  # TO DELETE!
+        if frame_idx % 10 == 0:  # TO DELETE!
             break
         pbar.update(1)
         success, frame = cap.read()
@@ -710,7 +739,7 @@ def find_range(curr_i, n, bit_state=None, range_step=50, total_indices=20):
 def ensure_bitset(state, video_name, n_frames):
     """Return bitarray for video, creating or expanding it if necessary."""
     if video_name not in state:
-        state[video_name] = bitarray(n_frames)
+        state[video_name] = bitarray.bitarray(n_frames)
         state[video_name].setall(False)
     elif len(state[video_name]) < n_frames:          # video re-encoded?
         extra = n_frames - len(state[video_name])

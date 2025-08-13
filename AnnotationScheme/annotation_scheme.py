@@ -73,11 +73,19 @@ yolo_failed = False
 # right click for points to segment, left point for excluded segmentation
 segment_by_points = True
 # this is for the tool hand segmentation. 1- tool, 2- hand
-active_prompt = '1'
-tool_hand_segmentation = {
-    '1': {'include_points':[], 'exclude_points':[], 'start_point': None, 'end_point': None},
-    '2': {'include_points':[], 'exclude_points':[], 'start_point': None, 'end_point': None}
-}
+active_prompt = 'TOOL'
+# tool_hand_segmentation = {
+#     '1': {'include_points':[], 'exclude_points':[], 'start_point': None, 'end_point': None},
+#     '2': {'include_points':[], 'exclude_points':[], 'start_point': None, 'end_point': None}
+# }
+object_segmentations = {}
+for obj in configs.OBJECT_TO_ANNOTATE.keys():
+    object_segmentations[obj] = {
+        'include_points': [],
+        'exclude_points': [],
+        'start_point': None,
+        'end_point': None
+    }
 # these variables for manually annotator GUI
 next_video = False
 is_drawing = False
@@ -109,36 +117,36 @@ def mouse_callback(event, x, y, flags, param):
     # ---------- LEFT  button down  -----------------------------------
     if event == cv2.EVENT_LBUTTONDOWN:
         if segment_by_points:
-            tool_hand_segmentation[active_prompt]['include_points'].append([x, y])
+            object_segmentations[active_prompt]['include_points'].append([x, y])
             cv2.circle(image_copy, (x, y), 5, param[active_prompt], -1)
         else:
             image_copy = clean_state.copy()
-            tool_hand_segmentation[active_prompt]['start_point'] = [x, y]
+            object_segmentations[active_prompt]['start_point'] = [x, y]
             is_drawing  = True
 
     # ---------- RIGHT button down  -----------------------------------
     elif event == cv2.EVENT_RBUTTONDOWN:
         if segment_by_points:
-            tool_hand_segmentation[active_prompt]['exclude_points'].append([x, y])
+            object_segmentations[active_prompt]['exclude_points'].append([x, y])
             cv2.circle(image_copy, (x, y), 5, configs.COLORS['exclude'], -1)
         else:
             image_copy = clean_state.copy()
-            tool_hand_segmentation[active_prompt]['start_point'] = [x, y]
+            object_segmentations[active_prompt]['start_point'] = [x, y]
             is_drawing  = True
 
     # ---------- mouse move (rectangle preview) ------------------------
     elif event == cv2.EVENT_MOUSEMOVE and is_drawing and not segment_by_points:
-        tool_hand_segmentation[active_prompt]['end_point'] = [x, y]
-        cv2.rectangle(temp_image, tool_hand_segmentation[active_prompt]['start_point'],
-                       tool_hand_segmentation[active_prompt]['end_point'], (0, 255, 0), 2)
+        object_segmentations[active_prompt]['end_point'] = [x, y]
+        cv2.rectangle(temp_image, object_segmentations[active_prompt]['start_point'],
+                       object_segmentations[active_prompt]['end_point'], (0, 255, 0), 2)
 
     # ---------- button up  -------------------------------------------
     elif event in (cv2.EVENT_LBUTTONUP, cv2.EVENT_RBUTTONUP):
         is_drawing = False
         if not segment_by_points:
-            tool_hand_segmentation[active_prompt]['end_point'] = [x, y]
-            cv2.rectangle(image_copy, tool_hand_segmentation[active_prompt]['start_point'],
-                           tool_hand_segmentation[active_prompt]['end_point'],
+            object_segmentations[active_prompt]['end_point'] = [x, y]
+            cv2.rectangle(image_copy, object_segmentations[active_prompt]['start_point'],
+                           object_segmentations[active_prompt]['end_point'],
                           bb_editting_color, 2)
 
     # ---------- refresh window ---------------------------------------
@@ -147,18 +155,15 @@ def mouse_callback(event, x, y, flags, param):
 
 def add_manually_bb(frame_image, mode='regular'):
     global winname, image_copy, clean_state, start_point, end_point, active_prompt, cursor_pos, segment_by_points
-
-    hand_tool_color = {
-        '1': (255, 255, 0),  # tool - blue
-        '2': (255, 0, 255),  # hand - pink
-    }
+    object_idx = 0
+    object_colors = configs.OBJECT_COLORS.copy()
     # Ask user to choose hand or tool
-    active_prompt = '1'  # tool by default -- BB and segmentation 
+    active_prompt = configs.OBJECT_WITH_BB[object_idx]  # tool by default -- BB and segmentation 
     image_copy = frame_image.copy()  # Create a copy for resetting during drawing
     clean_state = frame_image.copy()
     utils.place_window(winname)
     cv2.imshow(winname, image_copy)
-    cv2.setMouseCallback(winname, mouse_callback, hand_tool_color)
+    cv2.setMouseCallback(winname, mouse_callback, object_colors)
 
     while True:
         frame_vis = image_copy.copy()
@@ -169,50 +174,49 @@ def add_manually_bb(frame_image, mode='regular'):
             cv2.line(frame_vis, (cx, 0),  (cx, frame_vis.shape[0]), configs.COLORS['cross_line'], 1)
             cv2.line(frame_vis, (0,  cy), (frame_vis.shape[1], cy), configs.COLORS['cross_line'], 1)
         
-        if tool_hand_segmentation[active_prompt]['start_point'] is not None:
-            if tool_hand_segmentation[active_prompt]['end_point'] is not None:
-                cv2.rectangle(frame_vis, tuple(tool_hand_segmentation[active_prompt]['start_point']), tuple(tool_hand_segmentation[active_prompt]['end_point']), (0, 255, 0), 2)
+        if object_segmentations[active_prompt]['start_point'] is not None:
+            if object_segmentations[active_prompt]['end_point'] is not None:
+                cv2.rectangle(frame_vis, tuple(object_segmentations[active_prompt]['start_point']), tuple(object_segmentations[active_prompt]['end_point']), (0, 255, 0), 2)
             else:
-                cv2.rectangle(frame_vis, tuple(tool_hand_segmentation[active_prompt]['start_point']), tuple(cursor_pos), (0, 255, 0), 2)
+                cv2.rectangle(frame_vis, tuple(object_segmentations[active_prompt]['start_point']), tuple(cursor_pos), (0, 255, 0), 2)
 
         # --- overlay current mode on a copy so user sees it live
-        mode_text = "TOOL" if active_prompt == '1' else "HAND"
+        mode_text = active_prompt
         edit_mode_text = "BB" if not segment_by_points else "Points"
-        cv2.putText(frame_vis, f"Mode (1- TOOL, 2- HAND):   {mode_text}", (configs.x_offset, 90), cv2.FONT_HERSHEY_SIMPLEX,
-                    0.8, (255, 0, 255), 2, cv2.LINE_AA)
-        cv2.putText(frame_vis, f"Drawing (press b to change):  {edit_mode_text}", (configs.x_offset, 120), cv2.FONT_HERSHEY_SIMPLEX,
-                    0.8, (255, 0, 255), 2, cv2.LINE_AA)
+        cv2.putText(frame_vis, f"Mode (press [m] to change):   {mode_text}", (configs.x_offset, 90), cv2.FONT_HERSHEY_SIMPLEX,
+                    0.8, object_colors[active_prompt], 2, cv2.LINE_AA)
+        cv2.putText(frame_vis, f"Drawing (press [d] to change):  {edit_mode_text}", (configs.x_offset, 120), cv2.FONT_HERSHEY_SIMPLEX,
+                    0.8, object_colors[active_prompt], 2, cv2.LINE_AA)
         cv2.imshow(winname, frame_vis)
 
         key = cv2.waitKey(10) & 0xFF   # 20 ms tick → smooth UI
         if key in (13, 32):            # Enter or Space → finish
             break
-        elif key == ord('1'):
-            active_prompt = '1'
-        elif key == ord('2'):
-            active_prompt = '2'
-        elif key == ord('b'):
+        elif key == ord('m'):
+            active_prompt = list(configs.OBJECT_TO_ANNOTATE.keys())[(object_idx + 1) % len(configs.OBJECT_TO_ANNOTATE)]
+            object_idx += 1
+        elif key == ord('d'):
             segment_by_points = not segment_by_points
         
 
 
 def reset_globals():
-    global next_video, tool_hand_segmentation
+    global next_video, object_segmentations
 
     next_video = False
-    for obj_id in tool_hand_segmentation.keys():
-        for stream in tool_hand_segmentation[obj_id].keys():
+    for obj_id in object_segmentations.keys():
+        for stream in object_segmentations[obj_id].keys():
             if 'inc' in stream or 'exc' in stream:
-                tool_hand_segmentation[obj_id][stream] = []
+                object_segmentations[obj_id][stream] = []
             else:
-                tool_hand_segmentation[obj_id][stream] = None
+                object_segmentations[obj_id][stream] = None
 
 
-def run_preview(args, preview_path, tool_bbs, tool_segs=None, hand_segs=None, new_shape=(640, 360), milli=0, save_vis=False):
+def run_preview(args, preview_path, annotation_results, new_shape=(640, 360), milli=0, save_vis=False):
     """
     Run the result of the bounding boxes with a choice to edit
-    :param preview_path: path to MP4 bb r esult
-    :param tool_bbs: mapping of frame index to bounding box coordinates
+    :param preview_path: path to MP4 bb result
+    :param annotation_results: dictionary containing bounding boxes and segmentations for each object in configs
     :return:
     """
     global segment_by_points, winname
@@ -227,7 +231,7 @@ def run_preview(args, preview_path, tool_bbs, tool_segs=None, hand_segs=None, ne
     selected_class = -1
     total_frames = len(os.listdir(os.path.join(preview_path, 'frames')))
     winname = f'Preview - {os.path.split(preview_path)[-1]}'#  winname here so the window does not close and open after each frame..
-
+    
     while frame_idx < total_frames:
         orig_frame_path = os.path.join(preview_path, 'frames', f'{frame_idx:05d}.jpg')
         orig_frame_img = cv2.imread(orig_frame_path)
@@ -236,26 +240,37 @@ def run_preview(args, preview_path, tool_bbs, tool_segs=None, hand_segs=None, ne
         orig_h, orig_w, _ = orig_frame_img.shape
         frame_name = f"{os.path.split(preview_path)[-1]}_{frame_idx:05d}.jpg"
         img_saved = False
-        img_id_indicator = False
 
-        bbox = tool_bbs.get(str(frame_idx))  
-        # skip if missing OR explicitly marked as "empty"
-        if bbox is None or len(bbox) == 0 or (isinstance(bbox, list) and bbox == [None]):
+        # -------------------------------------------------- check first if the frame is already annotated
+        total_obj_annotated = 0
+        for obj, _ in configs.OBJECT_TO_ANNOTATE.items():
+            if f'{frame_idx}' in annotation_results[obj]['bb']:
+                if 'class_name' in annotation_results[obj]['bb'] and annotation_results[obj]['bb']['class_name'] is not None:
+                    class_name = annotation_results[obj]['bb']['class_name']
+                else:
+                    class_name = 'unknown'
+                    annotation_results[obj]['bb']['class_name'] = None
+                orig_frame_img = utils.draw_cocoBB_from_dict(orig_frame_img.copy(), annotation_results[obj]['bb'][f'{frame_idx}'],
+                                                              class_name,
+                                                              color=configs.OBJECT_COLORS[obj],
+                                                              orig_width=orig_w, orig_height=orig_h,
+                                                              target_size=(orig_w, orig_h)
+                                                              )
+                total_obj_annotated += 1   
+
+            if f'{frame_idx}' in annotation_results[obj]['seg']:
+                utils.safe_draw_polygons(orig_frame_img, annotation_results[obj]['seg'][f'{frame_idx}'], color=configs.OBJECT_COLORS[obj], alpha=0.4)
+                total_obj_annotated += 1
+            
+        if total_obj_annotated == 0:
+            # if no annotations, then skip this frame
+            args._progress_state[args.vid_name][frame_idx] = False
+            print(f"   [*] Skipped frame {frame_idx} as no annotations found")
             frame_idx += 1
             continue
         
-        orig_frame_img = utils.draw_cocoBB_from_dict(orig_frame_img.copy(), tool_bbs[f'{frame_idx}'], configs.category_id_to_name[selected_class] if selected_class > -1 else "Unknown",
-                                                        orig_width=orig_w, orig_height=orig_h,
-                                                        target_size=(orig_w, orig_h))
-
-        if f'{frame_idx}' in tool_segs:
-            utils.safe_draw_polygons(orig_frame_img, tool_segs[f'{frame_idx}'], color=(0, 255, 0), alpha=0.4)
-
-        if f'{frame_idx}' in hand_segs and hand_segs[f'{frame_idx}']:
-            utils.safe_draw_polygons(orig_frame_img, hand_segs[f'{frame_idx}'], color=(0, 0, 255), alpha=0.4)
-
-        vis_image = orig_frame_img.copy()
         # --------------------------------------------------  instructions
+        vis_image = orig_frame_img.copy()
         instr = "[a/Enter] Accept   [e] Edit BB   [n] Change Class   [q] Quit BB   [x] Quit Program"
         cv2.putText(orig_frame_img, instr, (configs.x_offset, 30), cv2.FONT_HERSHEY_SIMPLEX,
                     1.2, (255, 255, 0), 3, cv2.LINE_AA)
@@ -266,136 +281,137 @@ def run_preview(args, preview_path, tool_bbs, tool_segs=None, hand_segs=None, ne
         cv2.imshow(winname, orig_frame_img)
 
         key = cv2.waitKey(0) & 0xFF  
-        if key in (ord('q'), 27): 
-            # TODO -- also, save here the annotation before existing.
+        if key in (ord('q'), 27):       # --------- QUIT video -- all annotations saved
             cv2.destroyAllWindows()
             utils.save_coco_annotations(args.annotations, os.path.join(args.coco_data, 'annotations.json'))
             utils.save_open_video_names_as_pickles(args._progress_state, path=os.path.join(args.coco_data, 'done_video_names.pkl'), op='save')
             return
         
-        if key in (ord('x'),):  # Quit the program
+        if key in (ord('x'),):          # --------- EXIT the program NO ANNOTATIONS SAVED
             cv2.destroyAllWindows()
             sys.exit()
 
-
-        if key in (ord('e'),):  # EDIT BB
+        if key in (ord('e'),):          # --------- EDIT BB
             reset_globals() 
-            # segment_by_points = False
             cv2.putText(clean_frame_img, f'{frame_idx}/{total_frames-1}', (configs.x_offset, 30), cv2.FONT_HERSHEY_SIMPLEX,
                     1.2, (255, 255, 0), 3, cv2.LINE_AA)
             add_manually_bb(clean_frame_img, mode='review')
-            if not utils.no_point_selected_by_user(tool_hand_segmentation):
+            if not utils.no_point_selected_by_user(object_segmentations):
                 results = sam_prompt_to_polygons(clean_frame_img, eps=1.5, min_area=10)
-                if "tool" in results:
-                    tool_bbs[f'{frame_idx}'] = results["tool"]["bbox"]
-                    tool_segs[f'{frame_idx}'] = results["tool"]["segs"]
-                    print(f" [*] Updated BB for frame {frame_idx}: (Scaled to the new shape)")
-                
-                if "hand" in results:
-                    hand_segs[f'{frame_idx}'] = results["hand"]["segs"]
-                
-            else:
-                tool_bbs[f"{frame_idx}"] = [[]]  # mark skipped
-                tool_segs[f"{frame_idx}"] = [[]]  # mark skipped
-                hand_segs[f"{frame_idx}"] = []
-                args._progress_state[args.vid_name][frame_idx] = False
-                print(f"   [*] Skipped frame {frame_idx}")
+                for obj_name in configs.OBJECT_TO_ANNOTATE.keys():
+                    if obj_name in results and obj_name in configs.OBJECT_WITH_BB:
+                        annotation_results[obj_name]['bb'][f'{frame_idx}'] = results[obj_name]["bbox"]
+                        annotation_results[obj_name]['seg'][f'{frame_idx}'] = results[obj_name]["segs"]
+                    elif obj_name in results and obj_name not in configs.OBJECT_WITH_BB:
+                        annotation_results[obj_name]['seg'][f'{frame_idx}'] = results[obj_name]["segs"]
+                    
+                    else:
+                        args._progress_state[args.vid_name][frame_idx] = False
+                        print(f"   [*] Skipped the {obj_name} annotation of frame {frame_idx}")
                 
             cv2.destroyAllWindows()
             continue
 
-            
-        elif key == ord('n'):  # Change category in-GUI
-            image_with_classes = orig_frame_img.copy()
-            y_offset = 165
-            class_instr_lines = []
-            class_instr = ""
-            for cid, cname in configs.category_id_to_name.items():
-                class_instr += f"[{cid}] {cname}   "
-                # if cid % 3 == 2:
-                class_instr_lines.append(class_instr.strip())
-                class_instr = ""
-            if class_instr:
-                class_instr_lines.append(class_instr.strip())
-            for line in class_instr_lines:
-                cv2.putText(image_with_classes, line, (configs.x_offset, y_offset),
-                            cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 12), 2, cv2.LINE_AA)
-                y_offset += 50
-            cv2.imshow(winname, image_with_classes)
+        elif key == ord('n'):            # ---------  Change category in-GUI
+            image_with_object = orig_frame_img.copy()
+            image_with_classes = image_with_object.copy()
+            choose_category = 0
+            init_class = configs.OBJECT_WITH_BB[(choose_category) % len(configs.OBJECT_WITH_BB)]
             while True:
-                user_choice = utils.ask_class(image_with_classes, max_id=12, prompt_win=winname, x_offset=configs.x_offset, selected_class=selected_class)
-                if user_choice < 0 or user_choice >= len(configs.category_id_to_name):
+                image_with_classes, mapping_id_names = utils.build_classes_list(image_with_classes, init_class)
+                cv2.imshow(winname, image_with_classes)
+        
+                user_choice = utils.ask_class(image_with_classes, max_id=len(mapping_id_names), prompt_win=winname, x_offset=configs.x_offset)
+                if user_choice == -10:
+                    choose_category += 1
+                    init_class = configs.OBJECT_WITH_BB[choose_category % len(configs.OBJECT_WITH_BB)]
+                    image_with_classes = image_with_object.copy()
+                    continue
+                if user_choice == -1:  # User pressed Esc or 'q'
+                    print("   [!] No category selected. Exiting category selection.")
+                    frame_idx -= 1  
+                    break
+                if user_choice < 0 or user_choice >= len(mapping_id_names):
                     print("   [!] Invalid class. Please select a valid category.")
                     continue
                 else:
-                    if user_choice != selected_class:
-                        print(f"   [*] Updated category to {configs.category_id_to_name[user_choice]}")
-                        selected_class = user_choice
-                    frame_idx -= 1 # Go back to the same frame
+                    print(f"   [*] Updated category of {init_class} to {mapping_id_names[user_choice]}")
+                    annotation_results[init_class]['bb']['class_name'] = mapping_id_names[user_choice]
+                    frame_idx -= 1 
                     break
 
-
-        elif key in (ord('a'), 13, 32):  # Accept the current BB
-            if selected_class == -1:
-                print("   [!] No category selected. Please select a category.")
-                # frame_idx -= 1  # Go back to the same frame
+        elif key in (ord('a'), 13, 32):  # ---------  Accept the current BB
+            missing_class_name = False
+            img_indicator = False
+            for obj in annotation_results.keys():
+                if annotation_results[obj]['bb']['class_name'] is None and obj in configs.OBJECT_WITH_BB:
+                    print(f"   [!] No category selected for {obj}. ")
+                    # frame_idx -= 1  # Go back to the same frame
+                    missing_class_name = True
+                    # break
+            if missing_class_name:
+                print("   [!] Please select a category for the bounding box before accepting.")
                 continue
             else:
-                if tool_bbs[f"{frame_idx}"]:  # add tool if exist
-                    cv2.imwrite(os.path.join(args.coco_data, 'images', frame_name), cv2.resize(to_save_image, dsize=new_shape, interpolation=cv2.INTER_LINEAR))
-                    if save_vis:
-                        cv2.imwrite(os.path.join(preview_path, 'vis', frame_name), vis_image)
-                    img_saved = True
-                    bb = utils.rescale_bbox_x1y1wh(tool_bbs[f"{frame_idx}"][0], (orig_w, orig_h), new_shape)  # assuming always one bb in each frame..
-                    # print(f" Accepted BB for frame {frame_idx}: img_id: {img_id}- annID: {ann_id} --> {frame_name}")
-                    images.append({
-                        "id": img_id,
-                        "file_name": frame_name,
-                        "width": new_shape[0],
-                        "height": new_shape[1]
-                    })
-                    annotations.append({
-                        "id": ann_id,
-                        "image_id": img_id,
-                        "category_id": selected_class,  
-                        "bbox":bb,
-                        "area": bb[-1] * bb[-2],
-                        "iscrowd": 0,
-                        "tool_segmentation": utils.rescale_polygon(tool_segs[f'{frame_idx}'], (orig_w, orig_h), new_shape),
-                        "hand_segmentation": [],
-                    })
-                    ann_id += 1
-                    args._progress_state[args.vid_name][frame_idx] = True
-                if f'{frame_idx}' in hand_segs and hand_segs[f'{frame_idx}']:  # add hands
-                    # print(f" Accepted hand segmentations for frame {frame_idx}")
-                    annotations.append({
-                        "id": ann_id,
-                        "image_id": img_id,
-                        "category_id": 10,  
-                        "bbox":[],
-                        "area": 0,
-                        "iscrowd": 0,
-                        "tool_segmentation": [],
-                        "hand_segmentation": utils.rescale_polygon(hand_segs[f'{frame_idx}'], (orig_w, orig_h), new_shape)
-                    })
-                    if not img_saved:
-                        cv2.imwrite(os.path.join(args.coco_data, 'images', frame_name), cv2.resize(to_save_image, dsize=new_shape, interpolation=cv2.INTER_LINEAR))
-                        img_saved = True
-                    ann_id += 1
-                    img_id += 1
-                    img_id_indicator = True
-                    args._progress_state[args.vid_name][frame_idx] = True
+                for obj_name in annotation_results.keys():
+                    if obj_name in configs.OBJECT_WITH_BB:
+                        # check if have annotations
+                        if annotation_results[obj_name]['bb'] and f'{frame_idx}' in annotation_results[obj_name]['bb']:
+                            _bb = utils.rescale_bbox_x1y1wh(annotation_results[obj_name]['bb'][f"{frame_idx}"][0], (orig_w, orig_h), new_shape)  # assuming always one bb in each frame..
+                            annotations.append({
+                                "id": ann_id,
+                                "image_id": img_id,
+                                "category_id": args.category_mapping_name_to_id[annotation_results[obj_name]['bb']['class_name']],  
+                                "bbox":_bb,
+                                "area": _bb[-1] * _bb[-2],
+                                "iscrowd": 0,
+                                "segmentation": utils.rescale_polygon(annotation_results[obj_name]['seg'][f'{frame_idx}'], (orig_w, orig_h), new_shape),
+                            })
+                            ann_id += 1
+                            args._progress_state[args.vid_name][frame_idx] = True
+                            if not img_saved:
+                                cv2.imwrite(os.path.join(args.coco_data, 'images', frame_name), cv2.resize(to_save_image, dsize=new_shape, interpolation=cv2.INTER_LINEAR))
+                                images.append({
+                                    "id": img_id,
+                                    "file_name": frame_name,
+                                    "width": new_shape[0],
+                                    "height": new_shape[1]
+                                })
+                                img_saved = True
 
-                    
-                else:
-                    if not img_saved:
+
+                    elif annotation_results[obj_name]['seg'] and f'{frame_idx}' in annotation_results[obj_name]['seg']:
+                            annotations.append({
+                                "id": ann_id,
+                                "image_id": img_id,
+                                "category_id": 10,  # for hands -- CHANGE later  
+                                "bbox":[],
+                                "area": 0,
+                                "iscrowd": 0,
+                                "segmentation": utils.rescale_polygon(annotation_results[obj_name]['seg'][f'{frame_idx}'], (orig_w, orig_h), new_shape),
+                            })
+                            ann_id += 1
+                            
+                            args._progress_state[args.vid_name][frame_idx] = True
+                            if not img_saved:
+                                cv2.imwrite(os.path.join(args.coco_data, 'images', frame_name), cv2.resize(to_save_image, dsize=new_shape, interpolation=cv2.INTER_LINEAR))
+                                images.append({
+                                    "id": img_id,
+                                    "file_name": frame_name,
+                                    "width": new_shape[0],
+                                    "height": new_shape[1]
+                                })
+                                img_saved = True
+
+                    else:
                         # allow the user to see that this bb is indeed -1
-                        print(f"   [!] Discard BB for frame {frame_idx}: {tool_bbs[f'{frame_idx}']}")
-                
-                if not img_id_indicator and img_saved:
+                            print(f"   [!] Discard annotation for frame {frame_idx}")
+                            frame_idx += 1
+                            continue
+                if save_vis:
+                    cv2.imwrite(os.path.join(preview_path, 'vis', frame_name), vis_image)
+                if img_saved:
                     img_id += 1
-
-        # cv2.destroyAllWindows()
         frame_idx += 1
 
     
@@ -446,48 +462,35 @@ def second_stage(sam_video_predictor, output_frames_path, detected_frame_idx):
     Initialise SAM once, add obj-10 (tool) + obj-20 (hand) prompts,
     then propagate.
     """
-    global tool_hand_segmentation
+    global object_segmentations
     # 1) init state on the temp frame folder
     inference_state = sam_video_predictor.init_state(video_path=output_frames_path)
-    TOOL_ID, HAND_ID = 10, 20
+    # TOOL_ID, HAND_ID = 10, 20
 
-    if tool_hand_segmentation['1']['start_point'] and tool_hand_segmentation['1']['end_point']:
-        x1, y1 = start_point
-        x2, y2 = end_point
-        sam_video_predictor.add_new_points_or_box(
-            inference_state=inference_state,
+    for obj, obj_id in configs.OBJECT_TO_ANNOTATE.items():
+
+        if object_segmentations[obj]['start_point'] and object_segmentations[obj]['end_point']:
+            x1, y1 = object_segmentations[obj]['start_point']
+            x2, y2 = object_segmentations[obj]['end_point']
+            sam_video_predictor.add_new_points_or_box(
+                inference_state=inference_state,
             frame_idx=detected_frame_idx,
-            obj_id=TOOL_ID,
+            obj_id=obj_id,
             box = [min(x1, x2), min(y1, y2), max(x1, x2), max(y1, y2)]
         )
 
-    # ----------------------------------------------------  TOOL
-    if tool_hand_segmentation['1']['include_points']:      
-        sam_video_predictor.add_new_points_or_box(
-            inference_state=inference_state,
-            frame_idx=detected_frame_idx,
-            obj_id=TOOL_ID,
-            points=np.array(tool_hand_segmentation['1']['include_points'] +
-                             tool_hand_segmentation['1']['exclude_points'],
-                             dtype=np.float32),
-            labels=np.array([1]*len(tool_hand_segmentation['1']['include_points']) +
-                            [0]*len(tool_hand_segmentation['1']['exclude_points']),
-                            dtype=np.int32)
-        )
-
-    # ----------------------------------------------------  HAND
-    if tool_hand_segmentation['2']['include_points']:      
-        sam_video_predictor.add_new_points_or_box(
-            inference_state=inference_state,
-            frame_idx=detected_frame_idx,
-            obj_id=HAND_ID,
-            points=np.array(tool_hand_segmentation['2']['include_points'] +
-                             tool_hand_segmentation['2']['exclude_points'],
-                             dtype=np.float32),
-            labels=np.array([1]*len(tool_hand_segmentation['2']['include_points']) +
-                            [0]*len(tool_hand_segmentation['2']['exclude_points']),
-                            dtype=np.int32)
-        )
+        if object_segmentations[obj]['include_points']:
+            sam_video_predictor.add_new_points_or_box(
+                inference_state=inference_state,
+                frame_idx=detected_frame_idx,
+                obj_id=obj_id,
+                points=np.array(object_segmentations[obj]['include_points'] +
+                                object_segmentations[obj]['exclude_points'],
+                                dtype=np.float32),
+                labels=np.array([1]*len(object_segmentations[obj]['include_points']) +
+                                [0]*len(object_segmentations[obj]['exclude_points']),
+                                dtype=np.int32)
+            )
 
     video_segments = run_propagation(inference_state)  
     return video_segments
@@ -500,7 +503,7 @@ def sam_prompt_to_polygons(img_bgr, eps=1.5, min_area=10):
     @param eps: The epsilon value for polygon approximation
     @param min_area: The minimum area for a contour to be considered valid
     """
-    global sam_predictor, tool_hand_segmentation
+    global sam_predictor, object_segmentations
 
     sam_predictor.set_image(img_bgr[..., ::-1].copy())
     H, W = img_bgr.shape[:2]
@@ -525,19 +528,20 @@ def sam_prompt_to_polygons(img_bgr, eps=1.5, min_area=10):
             multimask_output=False)
         return masks[0].astype(np.uint8)
 
-    # -------------------------------------------------------  1. RECTANGLE?e
-    if tool_hand_segmentation['1']['start_point'] and tool_hand_segmentation['1']['end_point']:
-        x1, y1 = tool_hand_segmentation['1']['start_point']
-        x2, y2 = tool_hand_segmentation['1']['end_point']
-        box = [min(x1, x2), min(y1, y2), abs(x2 - x1), abs(y2 - y1)]
-        mask = _run_sam(box=[min(x1, x2), min(y1, y2), max(x1, x2), max(y1, y2)])
-        results["tool"] = {"bbox": [box], "segs": _mask_to_polys(mask)}
-        print(f" [*] Detected tool with bounding box: {len(results['tool']['segs'])}")
+    # -------------------------------------------------------  1. RECTANGLE?
+    for obj_name in configs.OBJECT_TO_ANNOTATE.keys():
+        if object_segmentations[obj_name]['start_point'] and object_segmentations[obj_name]['end_point']:
+            x1, y1 = object_segmentations[obj_name]['start_point']
+            x2, y2 = object_segmentations[obj_name]['end_point']
+            box = [min(x1, x2), min(y1, y2), abs(x2 - x1), abs(y2 - y1)]
+            mask = _run_sam(box=[min(x1, x2), min(y1, y2), max(x1, x2), max(y1, y2)])
+            results[obj_name] = {"bbox": [box], "segs": _mask_to_polys(mask)}
+            print(f" [*] Detected {obj_name} with bounding box: {len(results[obj_name]['segs'])}")
 
     # -------------------------------------------------------  2. POINT PROMPTS?
-    for prompt_key, label in (('1', "tool"), ('2', "hand")):
-        inc = tool_hand_segmentation[prompt_key]['include_points']
-        exc = tool_hand_segmentation[prompt_key]['exclude_points']
+    for label in configs.OBJECT_TO_ANNOTATE.keys():
+        inc = object_segmentations[label]['include_points']
+        exc = object_segmentations[label]['exclude_points']
         if not inc and not exc:                 # no clicks -- skip this class
             continue
 
@@ -550,7 +554,7 @@ def sam_prompt_to_polygons(img_bgr, eps=1.5, min_area=10):
         entry = {"mask": mask, "segs": polys}
 
         # ─── only the TOOL class needs a bounding-box ──────────────────
-        if label == "tool":
+        if label in configs.OBJECT_WITH_BB:
             # fastest: bounding box of the binary mask
             ys, xs = np.where(mask)             # pixel coords where mask == 1
             if xs.size:                         # guard against empty mask
@@ -720,7 +724,7 @@ def annotate_video_using_sam(args,
     @param debug: whether to debug the algorithm steps
     @return tool_bbs, hands_segmentations: a dict for each frame the bbs and hand seg.
     """
-    global winname, image_copy, clean_state, segment_by_points, next_video, tool_hand_segmentation
+    global winname, image_copy, clean_state, segment_by_points, next_video, object_segmentations
     v_path = args.video_path
     segment_by_points = True
     if curr_tool_output_path is None: # wrong here, fix
@@ -783,7 +787,7 @@ def annotate_video_using_sam(args,
                 cv2.destroyAllWindows()
                 return
 
-            if utils.no_point_selected_by_user(tool_hand_segmentation):
+            if utils.no_point_selected_by_user(object_segmentations):
                 skipped_frames[f'{i}'] = [[-1, -1, -1, -1]]
                 i += 1
                 continue
@@ -791,10 +795,10 @@ def annotate_video_using_sam(args,
 
             # Stage 2: apply SAM2 on the manually bb
             if debug:
-                for obj_id in tool_hand_segmentation.keys():
+                for obj_id in object_segmentations.keys():
                     print(f'{obj_id}: ')
-                    for stream in tool_hand_segmentation[obj_id]:
-                        print(f' > {stream}: {tool_hand_segmentation[obj_id][stream]}')
+                    for stream in object_segmentations[obj_id]:
+                        print(f' > {stream}: {object_segmentations[obj_id][stream]}')
 
             print(f'   > SAM FOR : {indices[0]} - {indices[-1]}')
             cv2.waitKey(1)
@@ -815,13 +819,13 @@ def annotate_video_using_sam(args,
 
     cv2.destroyAllWindows()
     # SAVING SAM RESULTS
-    tool_bbs, tool_segs, hand_segs = utils.extract_annotations(success_indices,
+    annotation_results = utils.extract_annotations(success_indices,
                                                                combined_video_segments,
                                                                format='coco')
 
     # to ensure the correct annotation, run a preview and edit the one that needed to editted.
     if preview_before_save:
-        run_preview(args, sub_root_saved_path, tool_bbs, tool_segs, hand_segs, save_vis=args.save_visualization)
+        run_preview(args, sub_root_saved_path, annotation_results, save_vis=args.save_visualization)
 
     if args.save_visualization:
         utils.reset_working_dir(frame_paths, delete_=True)
@@ -1107,33 +1111,32 @@ def ask_user_for_run_config():
         if args.coco_data == '':
             args.coco_data = 'results_coco_format'
         if not os.path.exists(args.coco_data):
+            categories = []
+            category_mapping_name_to_id = {}
+            obj_id = 0
+            for super_category, mapping_ in configs.OBJECT_CLASSES.items():
+                for _, obj in mapping_.items():
+                    categories.append({
+                        "id": obj_id,
+                        "name": obj,
+                        "supercategory": super_category
+                    })
+                    category_mapping_name_to_id[obj] = obj_id
+                    obj_id += 1
             Path(f'{args.coco_data}/images').mkdir(parents=True, exist_ok=True)
-            args.annotations = {'images': [], 'annotations': [],
-                "categories": [
-                {"id": 0, "name": "SL", "supercategory": "tool"},
-                {"id": 1, "name": "adjustable spanner", "supercategory": "tool"},
-                {"id": 2, "name": "allen", "supercategory": "tool"},
-                {"id": 3, "name": "drill", "supercategory": "tool"},
-                {"id": 4, "name": "hammer", "supercategory": "tool"},
-                {"id": 5, "name": "plier", "supercategory": "tool"},
-                {"id": 6, "name": "ratchet", "supercategory": "tool"},
-                {"id": 7, "name": "screwdriver", "supercategory": "tool"},
-                {"id": 8, "name": "tapemeasure", "supercategory": "tool"},
-                {"id": 9, "name": "wrench", "supercategory": "tool"},
-                {"id": 10, "name": "hands", "supercategory": "hands"},
-                {"id": 11, "name": "saw", "supercategory": "tool"},
-            ],}
+            args.annotations = {'images': [], 'annotations': [], "categories": categories}
+            args.category_mapping_name_to_id = category_mapping_name_to_id
             with open(os.path.join(args.coco_data, 'annotations.json'), 'w') as f:
                 json.dump(args.annotations, f, indent=4)
             args.done_video_names = set()
-        else:  # add _progress_state here
+        else:  
             with open(os.path.join(args.coco_data, 'annotations.json'), 'r') as f:
                 args.annotations = json.load(f)
             # extract all names of video
             if os.path.exists(os.path.join(args.coco_data, "done_video_names.pkl")):
                 args._progress_state = utils.save_open_video_names_as_pickles(None, path=os.path.join(args.coco_data, "done_video_names.pkl"), op='open')
-            # else:
-            #     args.done_video_names = set([fname['file_name'].split('_')[0] for fname in args.annotations['images']])
+            
+            args.category_mapping_name_to_id = {cat['name'].lower(): cat['id'] for cat in args.annotations['categories']}
 
         atexit.register(lambda: utils.save_open_video_names_as_pickles(args._progress_state, path=os.path.join(args.coco_data, 'done_video_names.pkl'), op='save'))
         args.category_id_mapping = {cat['name'].lower(): cat['id'] for cat in args.annotations['categories']}
