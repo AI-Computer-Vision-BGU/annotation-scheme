@@ -20,7 +20,7 @@ pip install -r requirments.txt
 
 ```
 
-#### 2&nbsp;·&nbsp; if you have CUDA installed, run the following (choose your version from [here](https://pytorch.org/) ):
+#### 2&nbsp;·&nbsp; if you have CUDA installed, run the following (choose your version from [here](https://pytorch.org/)):
 ```bash
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
 ```
