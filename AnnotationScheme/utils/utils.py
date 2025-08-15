@@ -254,7 +254,11 @@ def safe_draw_polygons(img, polygons, color, alpha=0.4):
     """
     polygons : list of polygons, where each polygon is a list/ndarray (N, 2)
     """
-    if not polygons:
+    if (
+        polygons is None
+        or (isinstance(polygons, (list, tuple)) and len(polygons) == 0)
+        or (isinstance(polygons, np.ndarray) and polygons.size == 0)
+        ):
         return
 
     # Ensure we always iterate over *individual* polygons
@@ -558,7 +562,7 @@ def draw_bb(out_mask, include_bb=True, shape=None):
         draw_bb_from_4p(mask_with_combined_bbox,
                         [combined_x, combined_y, combined_x + combined_w, combined_y + combined_h])
         return bb_coco, bb_yolo, segs
-    return out_mask, None, None
+    return [], [], []
 
 #########################################################
 #          Coco Annotations Functionallity              #
@@ -625,14 +629,18 @@ def draw_cocoBB_from_annotations(img_np, annotations, category_id_to_name, color
 
 def draw_cocoBB_from_dict(img_np, annotations, class_name, color=(0, 255, 0), orig_width=224, orig_height=224, target_size=(640, 480)):
     for ann in annotations:
-        x, y, w, h = ann
-        scale_x = target_size[0] / orig_width
-        scale_y = target_size[1] / orig_height
-        x, y, w, h = x * scale_x, y * scale_y, w * scale_x, h * scale_y
-        x1, y1, x2, y2 = int(x), int(y), int(x + w), int(y + h)
-        # class_name = category_id_to_name.get(ann['category_id'], "Unknown")
-        cv2.rectangle(img_np, (x1, y1), (x2, y2), color, 2)
-        cv2.putText(img_np, class_name, (x1, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
+        if ann is not None and len(ann) == 4:  # Ensure ann is a valid bbox
+            x, y, w, h = ann
+            scale_x = target_size[0] / orig_width
+            scale_y = target_size[1] / orig_height
+            x, y, w, h = x * scale_x, y * scale_y, w * scale_x, h * scale_y
+            x1, y1, x2, y2 = int(x), int(y), int(x + w), int(y + h)
+            # class_name = category_id_to_name.get(ann['category_id'], "Unknown")
+            cv2.rectangle(img_np, (x1, y1), (x2, y2), color, 2)
+            cv2.putText(img_np, class_name, (x1, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
+        else:
+            # print(f"Invalid annotation found: {ann}. Skipping drawing.")
+            continue
     return img_np
 
 
@@ -843,8 +851,6 @@ def video_to_frames_slow(video_path, output_path):
         # if frame_idx % 3 == 0:
         cv2.imwrite(filename, frame)
         frame_idx += 1
-        if frame_idx % 35 == 0:  # TO DELETE!
-            break
         pbar.update(1)
         success, frame = cap.read()
 

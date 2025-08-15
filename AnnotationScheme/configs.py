@@ -39,7 +39,8 @@ category_id_to_name = {
                         10: "hands",
                         11: "saw",
                         12: "elctric screwdriver",
-                        13: "None",
+                        13: "blade",
+                        14: "None",
     }
 
 device_to_id_mapping = {
@@ -51,6 +52,10 @@ device_to_id_mapping = {
     5: "Refrigerator",
     6: "scaffold board",
     7: "vibratory plate",
+    8: "monitor",
+    9: "TV",
+    10: "Fan",
+    11: "None",
 }
 
 OBJECT_CLASSES = {

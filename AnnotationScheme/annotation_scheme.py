@@ -16,9 +16,8 @@ it works as follows:
   13/08/2025 -- The scheme now support multi object segmentations (not only hands and tool) to change, goto config.py and change the object to annotate
 
 # TODO:
-  1. in preview -- show the skipped/previous annotations (if someone wants to reannotate)
+  1. Add in the intro menu the option to annotate the unannotated frames of each video - default start with the first unannotated VIDEO
   2. add automate hand segmentations -- intergrate egoHOS
-  3. add delete keywords in preview to delete annoying mis-segmnetation
 
 SEARCH WORDS IN THIS FILE FOR EDITTING/FIXING:
 1. MOVE
@@ -253,15 +252,17 @@ def run_preview(args, preview_path, annotation_results, new_shape=(640, 360), mi
                 else:
                     class_name = 'unknown'
                     annotation_results[obj]['bb']['class_name'] = None
-                orig_frame_img = utils.draw_cocoBB_from_dict(orig_frame_img.copy(), annotation_results[obj]['bb'][f'{frame_idx}'],
-                                                              class_name,
-                                                              color=configs.OBJECT_COLORS[obj],
-                                                              orig_width=orig_w, orig_height=orig_h,
-                                                              target_size=(orig_w, orig_h)
-                                                              )
-                total_obj_annotated += 1   
-
-            if f'{frame_idx}' in annotation_results[obj]['seg']:
+                
+                if annotation_results[obj]['bb'][f'{frame_idx}'] != []:
+                    # draw the bounding box
+                    orig_frame_img = utils.draw_cocoBB_from_dict(orig_frame_img.copy(), annotation_results[obj]['bb'][f'{frame_idx}'],
+                                                                class_name,
+                                                                color=configs.OBJECT_COLORS[obj],
+                                                                orig_width=orig_w, orig_height=orig_h,
+                                                                target_size=(orig_w, orig_h)
+                                                                )
+                    total_obj_annotated += 1   
+            if f'{frame_idx}' in annotation_results[obj]['seg'] and annotation_results[obj]['seg'][f'{frame_idx}']:
                 utils.safe_draw_polygons(orig_frame_img, annotation_results[obj]['seg'][f'{frame_idx}'], color=configs.OBJECT_COLORS[obj], alpha=0.4)
                 total_obj_annotated += 1
             
@@ -274,8 +275,8 @@ def run_preview(args, preview_path, annotation_results, new_shape=(640, 360), mi
         
         # --------------------------------------------------  instructions
         vis_image = orig_frame_img.copy()
-        menu_items = ["[a/Enter] Accept", "[e] Edit BB", "[n] Change Class",
-                    "[s] Skip Frame", "[q] Quit BB", "[x] Quit Program"]
+        menu_items = ["[a/Enter] Accept", "[e] Edit", "[n] Change Class",
+                    "[s] Skip Frame", "[p] Previous Frame", "[q] Quit BB", "[x] Quit Program", "[h] Help"]
         y0, y1 = utils.draw_menu_banner(orig_frame_img, menu_items, frame_idx, total_frames)
         utils.place_window(winname, winnsize=configs.winnsize)  # Place the window at the top left corner
         cv2.imshow(winname, orig_frame_img)
@@ -297,6 +298,13 @@ def run_preview(args, preview_path, annotation_results, new_shape=(640, 360), mi
             utils.save_open_video_names_as_pickles(args._progress_state, path=os.path.join(args.coco_data, 'done_video_names.pkl'), op='save')
             sys.exit()
         
+        elif key in (ord('p'),):          # --------- Previous frame
+            frame_idx -= 1
+            if frame_idx < 0:
+                frame_idx = 0
+            args._progress_state[args.vid_name][frame_idx] = False
+            continue
+
         elif key in (ord('s'), ord('S')): # --------- Skip current frame
             args._progress_state[args.vid_name][frame_idx] = False
             frame_idx += 1
@@ -425,6 +433,27 @@ def run_preview(args, preview_path, annotation_results, new_shape=(640, 360), mi
                 if img_saved:
                     img_id += 1
         
+        elif key in (ord('h'),):          # ---------  Help
+            help_text = ['Help Menu:',
+                         ' [a/Enter] Accept the current bounding boxes and segmentations',
+                         ' [e] Edit the bounding boxes or segmentations',
+                         ' [n] Change the category of the bounding box',
+                         ' [s] Skip the current frame (annotation deleted)',
+                         ' [p] Go to the previous frame',
+                         ' [q] Quit the video annotation (save all annotations)',
+                         ' [x] Exit the program without saving annotations',
+                         ' [h] Show this help menu'
+            ]
+            utils.draw_menu_panel(orig_frame_img, help_text, start_xy=(y0, y1 + 100),
+                                  bg_color=configs.COLORS['panel_color'],
+                                  text_color=configs.COLORS['menu_class'],
+                                  line_gap=configs.LINE_GAP)
+            cv2.imshow(winname, orig_frame_img)
+
+            key = cv2.waitKey(0) & 0xFF
+            if key in (ord('q'), ord('h'), 27, 104):  # Quit help menu
+                continue
+
         else:
             print("   [!] Pressed Uknown Keywords !! try again")
             continue
@@ -758,6 +787,12 @@ def annotate_video_using_sam(args,
     os.makedirs(sub_root_saved_path, exist_ok=True)
     os.makedirs(frame_paths, exist_ok=True)
 
+      # for now, pass the annotaTED VIDEOS (even if only 10 frames are annotated)
+    if args.vid_name in args._progress_state and args._progress_state[args.vid_name].count(True) > 0:
+        print(f'   [*] Skipping video {args.vid_name} as it has {args._progress_state[args.vid_name].count(True)}/{len(args._progress_state[args.vid_name])} annotated frames')
+        # utils.reset_working_dir(sub_root_saved_path, delete_=True)
+        return
+
     if frame_names is None:
         with utils.suppress_output():  # to suppress the output to stdout
             utils.video_to_frames_slow(v_path, frame_paths)   # change this to video_to_frames
@@ -770,7 +805,6 @@ def annotate_video_using_sam(args,
     current_working_file = os.path.join(sub_root_saved_path, 'working_file')  # file that holds n images each time
     os.makedirs(current_working_file, exist_ok=True)
 
-    hands_segmentations = {}
     combined_video_segments = {}
     success_indices = []
     ask_user = True   # ask if skip current video (SAM2 purpose)n
@@ -793,6 +827,8 @@ def annotate_video_using_sam(args,
                 last_detected_frame = i
                 i += 1
                 continue
+
+          
             
             # Prepare the current window of frames
             indices = utils.find_range(i, total_frames, bit_state=args._progress_state[args.vid_name], range_step=args.repeat)
@@ -1044,6 +1080,8 @@ def annotator(args, fixer=False):
     elif args.directory_path:
         tool_categories = [tool_cat for tool_cat in os.listdir(args.directory_path) if '.DS_' not in tool_cat ]#and tool_cat in configs.CATEGORIES]
         for tool_category in tool_categories:
+            # if tool_category not in ["Hammering"]:
+            #     continue
             print(f'Annotating {tool_category} videos')
             args.curr_tool_id = args.category_id_mapping[tool_category] if tool_category in args.category_id_mapping else -1
             videos = [vid for vid in os.listdir(os.path.join(args.directory_path, tool_category)) if vid.endswith(('.mp4', '.MP4', '.mov'))]
@@ -1159,9 +1197,20 @@ def ask_user_for_run_config():
             if os.path.exists(os.path.join(args.coco_data, "done_video_names.pkl")):
                 args._progress_state = utils.save_open_video_names_as_pickles(None, path=os.path.join(args.coco_data, "done_video_names.pkl"), op='open')
             
+            # check for new categories
+            for super_cat, mapping_ in configs.OBJECT_CLASSES.items():
+                for _, obj in mapping_.items():
+                    if obj.lower() not in [cat['name'].lower() for cat in args.annotations['categories']]:
+                        new_cat_id = len(args.annotations['categories'])
+                        args.annotations['categories'].append({
+                            "id": new_cat_id,
+                            "name": obj,
+                            "supercategory": super_cat
+                        })
+
             args.category_mapping_name_to_id = {cat['name'].lower(): cat['id'] for cat in args.annotations['categories']}
 
-        atexit.register(lambda: utils.save_open_video_names_as_pickles(args._progress_state, path=os.path.join(args.coco_data, 'done_video_names.pkl'), op='save'))
+        # atexit.register(lambda: utils.save_open_video_names_as_pickles(args._progress_state, path=os.path.join(args.coco_data, 'done_video_names.pkl'), op='save'))
         args.category_id_mapping = {cat['name'].lower(): cat['id'] for cat in args.annotations['categories']}
         args.id_category_mapping = {cat['id']: cat['name'].lower() for cat in args.annotations['categories']}
         print(f' ------ {args._progress_state}')

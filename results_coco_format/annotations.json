@@ -1,116 +1,141 @@
 {
-  "images": [],
-  "annotations": [],
-  "categories": [
-    {
-      "id": 0,
-      "name": "SL",
-      "supercategory": "TOOL"
-    },
-    {
-      "id": 1,
-      "name": "adjustable spanner",
-      "supercategory": "TOOL"
-    },
-    {
-      "id": 2,
-      "name": "allen",
-      "supercategory": "TOOL"
-    },
-    {
-      "id": 3,
-      "name": "drill",
-      "supercategory": "TOOL"
-    },
-    {
-      "id": 4,
-      "name": "hammer",
-      "supercategory": "TOOL"
-    },
-    {
-      "id": 5,
-      "name": "plier",
-      "supercategory": "TOOL"
-    },
-    {
-      "id": 6,
-      "name": "ratchet",
-      "supercategory": "TOOL"
-    },
-    {
-      "id": 7,
-      "name": "screwdriver",
-      "supercategory": "TOOL"
-    },
-    {
-      "id": 8,
-      "name": "tapemeasure",
-      "supercategory": "TOOL"
-    },
-    {
-      "id": 9,
-      "name": "wrench",
-      "supercategory": "TOOL"
-    },
-    {
-      "id": 10,
-      "name": "hands",
-      "supercategory": "TOOL"
-    },
-    {
-      "id": 11,
-      "name": "saw",
-      "supercategory": "TOOL"
-    },
-    {
-      "id": 12,
-      "name": "elctric screwdriver",
-      "supercategory": "TOOL"
-    },
-    {
-      "id": 13,
-      "name": "None",
-      "supercategory": "TOOL"
-    },
-    {
-      "id": 14,
-      "name": "PC",
-      "supercategory": "DEVICE"
-    },
-    {
-      "id": 15,
-      "name": "Laptop",
-      "supercategory": "DEVICE"
-    },
-    {
-      "id": 16,
-      "name": "Tablet",
-      "supercategory": "DEVICE"
-    },
-    {
-      "id": 17,
-      "name": "Washer",
-      "supercategory": "DEVICE"
-    },
-    {
-      "id": 18,
-      "name": "Dryer",
-      "supercategory": "DEVICE"
-    },
-    {
-      "id": 19,
-      "name": "Refrigerator",
-      "supercategory": "DEVICE"
-    },
-    {
-      "id": 20,
-      "name": "scaffold board",
-      "supercategory": "DEVICE"
-    },
-    {
-      "id": 21,
-      "name": "vibratory plate",
-      "supercategory": "DEVICE"
-    }
-  ]
+    "images": [],
+    "annotations": [],
+    "categories": [
+        {
+            "id": 0,
+            "name": "SL",
+            "supercategory": "TOOL"
+        },
+        {
+            "id": 1,
+            "name": "adjustable spanner",
+            "supercategory": "TOOL"
+        },
+        {
+            "id": 2,
+            "name": "allen",
+            "supercategory": "TOOL"
+        },
+        {
+            "id": 3,
+            "name": "drill",
+            "supercategory": "TOOL"
+        },
+        {
+            "id": 4,
+            "name": "hammer",
+            "supercategory": "TOOL"
+        },
+        {
+            "id": 5,
+            "name": "plier",
+            "supercategory": "TOOL"
+        },
+        {
+            "id": 6,
+            "name": "ratchet",
+            "supercategory": "TOOL"
+        },
+        {
+            "id": 7,
+            "name": "screwdriver",
+            "supercategory": "TOOL"
+        },
+        {
+            "id": 8,
+            "name": "tapemeasure",
+            "supercategory": "TOOL"
+        },
+        {
+            "id": 9,
+            "name": "wrench",
+            "supercategory": "TOOL"
+        },
+        {
+            "id": 10,
+            "name": "hands",
+            "supercategory": "TOOL"
+        },
+        {
+            "id": 11,
+            "name": "saw",
+            "supercategory": "TOOL"
+        },
+        {
+            "id": 12,
+            "name": "elctric screwdriver",
+            "supercategory": "TOOL"
+        },
+        {
+            "id": 13,
+            "name": "blade",
+            "supercategory": "TOOL"
+        },
+        {
+            "id": 14,
+            "name": "None",
+            "supercategory": "TOOL"
+        },
+        {
+            "id": 15,
+            "name": "PC",
+            "supercategory": "DEVICE"
+        },
+        {
+            "id": 16,
+            "name": "Laptop",
+            "supercategory": "DEVICE"
+        },
+        {
+            "id": 17,
+            "name": "Tablet",
+            "supercategory": "DEVICE"
+        },
+        {
+            "id": 18,
+            "name": "Washer",
+            "supercategory": "DEVICE"
+        },
+        {
+            "id": 19,
+            "name": "Dryer",
+            "supercategory": "DEVICE"
+        },
+        {
+            "id": 20,
+            "name": "Refrigerator",
+            "supercategory": "DEVICE"
+        },
+        {
+            "id": 21,
+            "name": "scaffold board",
+            "supercategory": "DEVICE"
+        },
+        {
+            "id": 22,
+            "name": "vibratory plate",
+            "supercategory": "DEVICE"
+        },
+        {
+            "id": 23,
+            "name": "monitor",
+            "supercategory": "DEVICE"
+        },
+        {
+            "id": 24,
+            "name": "TV",
+            "supercategory": "DEVICE"
+        },
+        {
+            "id": 25,
+            "name": "Fan",
+            "supercategory": "DEVICE"
+        },
+        {
+            "id": 26,
+            "name": "None",
+            "supercategory": "DEVICE"
+        }
+    ]
 }
