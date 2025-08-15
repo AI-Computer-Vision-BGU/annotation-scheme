@@ -79,7 +79,7 @@ The very first pop-up lets you bail out early:
 | **X** | Exit the entire program |
 
 <p align="center">
-  <img src="assets/init_w.png" width="480" alt="First window – skip or exit">
+  <img src="assets/first_window.png" width="480" alt="First window – skip or exit">
 </p>
 
 ---
@@ -88,10 +88,9 @@ The very first pop-up lets you bail out early:
 Press **any other key** (Space / Enter) to jump into the annotator loop.
 | Key | Action |
 |-----|--------|
-| **1** | annotate the **object**   |
-| **2** | annotate the **hands**  |
-| **b** | toggle between **Bounding-box** mode and **Point-prompt** mode  |
-| **any other key**  | SAM2 starts with these prompts to propagate over the next **50 frames**  |
+| **m/M** | tuggle between the **object**   |
+| **d/D** | tuggle between boudning box or point prompts  |
+| **Enter/Space**  | SAM2 starts with these prompts to propagate over the next **50 frames**  |
 
 <p align="center">
   <img src="assets/annotator.gif" width="640" alt="Live annotation demo">

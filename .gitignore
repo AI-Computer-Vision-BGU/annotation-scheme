@@ -8,3 +8,5 @@ annotation_results/
 results_coco_format/images/
 .DS_Store
 results_coco_format/*.pkl
+__pycache__/
+*.py[cod]

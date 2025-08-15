@@ -87,9 +87,9 @@ next_video = False
 is_drawing = False
 image_copy = None   # To reset the image during dynamic drawing
 clean_state = None  # the clean image state for the drawing
+previous_state = None  # to reset the image during dynamic drawing
 winname = f'{-1}'   # before starting...
 tracker_path = 'tracker.json' # track the database paths (add for each path if manually or yolo)
-bb_editting_color = (0, 0, 255)
 cursor_pos = None            # (x, y) or None
 
 
@@ -97,8 +97,8 @@ cursor_pos = None            # (x, y) or None
 #                     Helpers                           #
 #########################################################
 def mouse_callback(event, x, y, flags, param):
-    global start_point, end_point, is_drawing, image_copy
-    global clean_state, segment_by_points, active_prompt, cursor_pos
+    global image_copy, previous_state, clean_state
+    global segment_by_points, active_prompt, cursor_pos, is_drawing
 
     # ---------- live lines ------------------------------------
     temp_image = image_copy.copy()
@@ -114,8 +114,9 @@ def mouse_callback(event, x, y, flags, param):
         if segment_by_points:
             object_segmentations[active_prompt]['include_points'].append([x, y])
             cv2.circle(image_copy, (x, y), 5, param[active_prompt], -1)
+            previous_state = image_copy.copy()
         else:
-            image_copy = clean_state.copy()
+            image_copy = previous_state.copy()
             object_segmentations[active_prompt]['start_point'] = [x, y]
             is_drawing  = True
 
@@ -124,8 +125,8 @@ def mouse_callback(event, x, y, flags, param):
         if segment_by_points:
             object_segmentations[active_prompt]['exclude_points'].append([x, y])
             cv2.circle(image_copy, (x, y), 5, configs.COLORS['exclude'], -1)
+            previous_state = image_copy.copy()
         else:
-            image_copy = clean_state.copy()
             object_segmentations[active_prompt]['start_point'] = [x, y]
             is_drawing  = True
 
@@ -141,21 +142,22 @@ def mouse_callback(event, x, y, flags, param):
         if not segment_by_points:
             object_segmentations[active_prompt]['end_point'] = [x, y]
             cv2.rectangle(image_copy, object_segmentations[active_prompt]['start_point'],
-                           object_segmentations[active_prompt]['end_point'],
-                          bb_editting_color, 2)
+                          object_segmentations[active_prompt]['end_point'],
+                          param[active_prompt], 2)
 
     # ---------- refresh window ---------------------------------------
     cv2.imshow(winname, temp_image)
 
 
-def add_manually_bb(frame_image, mode='regular'):
-    global winname, image_copy, clean_state, start_point, end_point, active_prompt, cursor_pos, segment_by_points
+def add_manually_bb(frame_image, frame_tracker_text=''):
+    global winname, image_copy, clean_state, active_prompt, cursor_pos, segment_by_points, previous_state
     object_idx = 0
     object_colors = configs.OBJECT_COLORS.copy()
     # Ask user to choose hand or tool
     active_prompt = configs.OBJECT_WITH_BB[object_idx]  # tool by default -- BB and segmentation 
     image_copy = frame_image.copy()  # Create a copy for resetting during drawing
     clean_state = frame_image.copy()
+    previous_state = image_copy.copy()  # Store the initial state for resetting
     utils.place_window(winname)
     cv2.imshow(winname, image_copy)
     cv2.setMouseCallback(winname, mouse_callback, object_colors)
@@ -171,17 +173,21 @@ def add_manually_bb(frame_image, mode='regular'):
         
         if object_segmentations[active_prompt]['start_point'] is not None:
             if object_segmentations[active_prompt]['end_point'] is not None:
-                cv2.rectangle(frame_vis, tuple(object_segmentations[active_prompt]['start_point']), tuple(object_segmentations[active_prompt]['end_point']), (0, 255, 0), 2)
+                cv2.rectangle(frame_vis, tuple(object_segmentations[active_prompt]['start_point']), tuple(object_segmentations[active_prompt]['end_point']), object_colors[active_prompt], 2)
             else:
-                cv2.rectangle(frame_vis, tuple(object_segmentations[active_prompt]['start_point']), tuple(cursor_pos), (0, 255, 0), 2)
+                cv2.rectangle(frame_vis, tuple(object_segmentations[active_prompt]['start_point']), tuple(cursor_pos), object_colors[active_prompt], 2)
 
         # --- overlay current mode on a copy so user sees it live
         mode_text = active_prompt
         edit_mode_text = "BB" if not segment_by_points else "Points"
-        cv2.putText(frame_vis, f"Mode (press [m] to change):   {mode_text}", (configs.x_offset, 90), cv2.FONT_HERSHEY_SIMPLEX,
-                    0.8, object_colors[active_prompt], 2, cv2.LINE_AA)
-        cv2.putText(frame_vis, f"Drawing (press [d] to change):  {edit_mode_text}", (configs.x_offset, 120), cv2.FONT_HERSHEY_SIMPLEX,
-                    0.8, object_colors[active_prompt], 2, cv2.LINE_AA)
+        menu_lines = [frame_tracker_text,
+                      f"Mode   (press [m] to change):   {mode_text}",
+                      f"Drawing (press [d] to change):  {edit_mode_text}"]
+        utils.draw_menu_panel(frame_vis, menu_lines, 
+                              start_xy=(10, 10),
+                              bg_color=configs.COLORS['panel_color'],
+                              text_color=object_colors[active_prompt],
+                              line_gap=configs.LINE_GAP)
         cv2.imshow(winname, frame_vis)
 
         key = cv2.waitKey(10) & 0xFF   # 20 ms tick → smooth UI
@@ -189,9 +195,13 @@ def add_manually_bb(frame_image, mode='regular'):
             break
         elif key == ord('m'):
             active_prompt = list(configs.OBJECT_TO_ANNOTATE.keys())[(object_idx + 1) % len(configs.OBJECT_TO_ANNOTATE)]
+            previous_state = image_copy.copy()
             object_idx += 1
         elif key == ord('d'):
             segment_by_points = not segment_by_points
+        elif key in (ord('q'), 27):
+            reset_globals()
+            break
         
 
 def reset_globals():
@@ -222,7 +232,6 @@ def run_preview(args, preview_path, annotation_results, new_shape=(640, 360), mi
     img_id = len(os.listdir(os.path.join(args.coco_data, 'images')))
     ann_id = len(annotations)
     frame_idx = 0
-    selected_class = -1
     total_frames = len(os.listdir(os.path.join(preview_path, 'frames')))
     winname = f'Preview - {os.path.split(preview_path)[-1]}'#  winname here so the window does not close and open after each frame..
     
@@ -265,17 +274,14 @@ def run_preview(args, preview_path, annotation_results, new_shape=(640, 360), mi
         
         # --------------------------------------------------  instructions
         vis_image = orig_frame_img.copy()
-        instr = "[a/Enter] Accept   [e] Edit BB   [n] Change Class   [s] Skip Frame   [q] Quit BB   [x] Quit Program"
-        cv2.putText(orig_frame_img, instr, (configs.x_offset, 30), cv2.FONT_HERSHEY_SIMPLEX,
-                    1.2, (255, 255, 0), 3, cv2.LINE_AA)
-        cv2.putText(orig_frame_img, f'{frame_idx}/{total_frames-1}', (configs.x_offset, 80), cv2.FONT_HERSHEY_SIMPLEX,
-                    1.2, (255, 255, 0), 3, cv2.LINE_AA)
-        
+        menu_items = ["[a/Enter] Accept", "[e] Edit BB", "[n] Change Class",
+                    "[s] Skip Frame", "[q] Quit BB", "[x] Quit Program"]
+        y0, y1 = utils.draw_menu_banner(orig_frame_img, menu_items, frame_idx, total_frames)
         utils.place_window(winname, winnsize=configs.winnsize)  # Place the window at the top left corner
         cv2.imshow(winname, orig_frame_img)
 
         key = cv2.waitKey(0) & 0xFF  
-        if key in (ord('q'), 27):       # --------- QUIT video -- all annotations saved
+        if key in (ord('q'), 27):         # --------- QUIT video -- all annotations saved
             cv2.destroyAllWindows()
             args.annotations['images'].extend(images)
             args.annotations['annotations'].extend(annotations)
@@ -285,18 +291,21 @@ def run_preview(args, preview_path, annotation_results, new_shape=(640, 360), mi
         
         elif key in (ord('x'),):          # --------- EXIT the program NO ANNOTATIONS SAVED
             cv2.destroyAllWindows()
+            # mark frames as unannotated
+            for i in range(frame_idx, total_frames):
+                args._progress_state[args.vid_name][i] = False
             utils.save_open_video_names_as_pickles(args._progress_state, path=os.path.join(args.coco_data, 'done_video_names.pkl'), op='save')
             sys.exit()
         
         elif key in (ord('s'), ord('S')): # --------- Skip current frame
+            args._progress_state[args.vid_name][frame_idx] = False
             frame_idx += 1
             continue
 
         elif key in (ord('e'),):          # --------- EDIT BB
-            reset_globals() 
-            cv2.putText(clean_frame_img, f'{frame_idx}/{total_frames-1}', (configs.x_offset, 30), cv2.FONT_HERSHEY_SIMPLEX,
-                    1.2, (255, 255, 0), 3, cv2.LINE_AA)
-            add_manually_bb(clean_frame_img, mode='review')
+            reset_globals()
+            frame_tracker_text = f'Frame Tracker: {frame_idx}/{total_frames-1}'
+            add_manually_bb(clean_frame_img, frame_tracker_text=frame_tracker_text)
             if not utils.no_point_selected_by_user(object_segmentations):
                 results = sam_prompt_to_polygons(clean_frame_img, eps=1.5, min_area=10)
                 for obj_name in configs.OBJECT_TO_ANNOTATE.keys():
@@ -313,16 +322,16 @@ def run_preview(args, preview_path, annotation_results, new_shape=(640, 360), mi
             cv2.destroyAllWindows()
             continue
 
-        elif key == ord('n'):            # ---------  Change category in-GUI
+        elif key == ord('n'):             # ---------  Change category in-GUI
             image_with_object = orig_frame_img.copy()
             image_with_classes = image_with_object.copy()
             choose_category = 0
             init_class = configs.OBJECT_WITH_BB[(choose_category) % len(configs.OBJECT_WITH_BB)]
             while True:
-                image_with_classes, mapping_id_names = utils.build_classes_list(image_with_classes, init_class)
+                panel_bound, image_with_classes, mapping_id_names, metrics = utils.build_classes_list(image_with_classes, init_class, banner_bounds=(y0, y1))
                 cv2.imshow(winname, image_with_classes)
-        
-                user_choice = utils.ask_class(image_with_classes, max_id=len(mapping_id_names), prompt_win=winname, x_offset=configs.x_offset)
+                user_choice = utils.ask_class(image_with_classes, max_id=len(mapping_id_names), prompt_win=winname,
+                                              panel_metrics=metrics, color=configs.OBJECT_COLORS[init_class])
                 if user_choice == -10:
                     choose_category += 1
                     init_class = configs.OBJECT_WITH_BB[choose_category % len(configs.OBJECT_WITH_BB)]
@@ -341,7 +350,7 @@ def run_preview(args, preview_path, annotation_results, new_shape=(640, 360), mi
                     frame_idx -= 1 
                     break
 
-        elif key in (ord('a'), 13, 32):  # ---------  Accept the current BB
+        elif key in (ord('a'), 13, 32):   # ---------  Accept the current BB
             missing_class_name = False
             img_indicator = False
             for obj in annotation_results.keys():
@@ -351,7 +360,6 @@ def run_preview(args, preview_path, annotation_results, new_shape=(640, 360), mi
                     missing_class_name = True
                     # break
             if missing_class_name:
-                print("   [!] Please select a category for the bounding box before accepting.")
                 continue
             else:
                 for obj_name in annotation_results.keys():
@@ -420,17 +428,18 @@ def run_preview(args, preview_path, annotation_results, new_shape=(640, 360), mi
         else:
             print("   [!] Pressed Uknown Keywords !! try again")
             continue
-
-
         frame_idx += 1
 
-    
     if not images and not annotations:
+        cv2.destroyAllWindows()
         return
 
     # First, ask user if he want to discard annotations
     question_img = orig_frame_img.copy()
-    cv2.putText(question_img, "Remove bbs? (y/n)", (1280//2, 720//6), cv2.FONT_HERSHEY_SIMPLEX,
+    h, w, _ = question_img.shape
+    test = "Remove bbs? (y/n)"
+    (tw, th), _ = cv2.getTextSize(test, cv2.FONT_HERSHEY_SIMPLEX, 1.9, 4)
+    cv2.putText(question_img, test, (w//2 - tw//2, h//6), cv2.FONT_HERSHEY_SIMPLEX,
                 1.9, (0, 0, 255), 4, cv2.LINE_AA)
 
     utils.place_window(winname, winnsize=configs.winnsize)  # Place the window at the top left corner
@@ -582,6 +591,8 @@ def sam_prompt_to_polygons(img_bgr, eps=1.5, min_area=10):
 #########################################################
 def locate_tool_from_frame(frame_image,
                            last_detected_frame,
+                           indices,
+                           total_frames,
                            ask_user=False,):
     """
     Locate manually by points the tool in the current frame
@@ -592,16 +603,17 @@ def locate_tool_from_frame(frame_image,
     @return:
     """
     global winname, next_video, segment_by_points
-
-    # if segment_by_points:           # Choose points?
-
-    # TODO -- ask user if he want to skip the video withen the window of opencv
     if ask_user:
         # Add text to the frame
         question_img = frame_image.copy()
-        quere = f'[N] Next Video   [X] Exit Program'
-        cv2.putText(question_img, quere, (60, 90), cv2.FONT_HERSHEY_SIMPLEX,
-                    1.9, (0, 255, 255), 3, cv2.LINE_AA)
+        menu_list = [f'Annotating {indices[0]} - {indices[-1]}/{total_frames-1}',
+                     f'[N] Next Video        [X] Exit Program']
+
+        utils.draw_menu_panel(question_img, menu_list,
+                              start_xy=(10, 10),
+                              bg_color=configs.COLORS['panel_color'],
+                              text_color=configs.COLORS['menu_class'],
+                              line_gap=configs.LINE_GAP)
 
         cv2.imshow(winname, question_img)
 
@@ -617,8 +629,9 @@ def locate_tool_from_frame(frame_image,
                 break
 
         ask_user = False
-        
-    add_manually_bb(frame_image)
+
+    frame_tracker_text = f'Frame Tracker: {indices[0]}/{total_frames-1}'
+    add_manually_bb(frame_image, frame_tracker_text=frame_tracker_text)
     return ask_user, last_detected_frame
 
 
@@ -747,7 +760,7 @@ def annotate_video_using_sam(args,
 
     if frame_names is None:
         with utils.suppress_output():  # to suppress the output to stdout
-            utils.video_to_frames(v_path, frame_paths)   # change this to video_to_frames
+            utils.video_to_frames_slow(v_path, frame_paths)   # change this to video_to_frames
         frame_names = [
             p for p in os.listdir(frame_paths)
             if os.path.splitext(p)[-1] in [".jpg", ".jpeg", ".JPG", ".JPEG", ".png"]
@@ -787,10 +800,10 @@ def annotate_video_using_sam(args,
                 print(f'   > Starting with {indices[0]} - {indices[-1]}/{len(indices)} frames from {len(frame_names)} frames')
 
             frame_image = cv2.imread(os.path.join(frame_paths, frame_names[i]))
-            cv2.putText(frame_image, f'Annotating {indices[0]} - {indices[-1]}/{total_frames-1}', (configs.x_offset, 30), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 0, 0), 2, cv2.LINE_AA)
-            
             ask_user, last_detected_frame = locate_tool_from_frame(frame_image,
                                                                    last_detected_frame,
+                                                                   indices,
+                                                                   total_frames,
                                                                    ask_user=ask_user,)
 
             if next_video:
@@ -799,6 +812,7 @@ def annotate_video_using_sam(args,
 
             if utils.no_point_selected_by_user(object_segmentations):
                 skipped_frames[f'{i}'] = [[-1, -1, -1, -1]]
+                args._progress_state[args.vid_name][frame_number] = False
                 i += 1
                 continue
 
@@ -1054,7 +1068,6 @@ def annotator(args, fixer=False):
         # Fix the annotations
         print(f'Fixing annotations in {args.directory_path}')
         fix_annotations(args)
-
 
 
 def ask_user_for_run_config():

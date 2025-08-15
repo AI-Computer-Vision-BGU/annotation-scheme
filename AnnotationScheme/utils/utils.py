@@ -24,6 +24,231 @@ ffmpeg_path = imageio_ffmpeg.get_ffmpeg_exe()
 #########################################################
 #                  Visualization                        #
 #########################################################
+def draw_menu_panel(img, lines, *,
+                    banner_bounds=None,   # (y_top, y_bottom) from your top menu banner
+                    start_xy=None,        # (x,y) to override default placement
+                    text_color=(255,240,191),  # readable cyan-white (BGR)
+                    bg_color=(60,60,60),  # dark grey panel
+                    alpha=0.35,
+                    thickness=2,
+                    font=None,
+                    font_scale=None,
+                    line_gap=1.35,
+                    pad_x=12, pad_t=10, pad_y=10, margin_x=None):
+    """
+    Draw a small translucent panel with each string in `lines` on a new row.
+    Returns: (panel_top, panel_bottom), metrics dict
+    """
+    H, W = img.shape[:2]
+    if font is None:
+        font = cv2.FONT_HERSHEY_SIMPLEX
+    if font_scale is None:
+        font_scale = max(0.7, min(1.4, 0.9 * (W / 1280.0)))
+    if margin_x is None:
+        margin_x = max(10, int(0.02 * W))
+
+    # Default position: just below the top banner
+    if start_xy is None:
+        y0 = (banner_bounds[1] if banner_bounds else 0) + pad_y
+        x0 = margin_x
+    else:
+        x0, y0 = start_xy
+
+    # Measure longest line + line height
+    max_w, line_h = 0, 0
+    for ln in lines:
+        (tw, th), _ = cv2.getTextSize(ln, font, font_scale, thickness)
+        max_w = max(max_w, tw)
+        line_h = max(line_h, int(th * 1.2))
+
+    panel_w = min(W - 2*margin_x, max_w + 2*pad_x)
+    panel_h = int(pad_t + len(lines) * line_h * line_gap + pad_t)
+
+    # Background
+    draw_translucent_panel(img, x0, y0, panel_w, panel_h, color=bg_color, alpha=alpha)
+
+    # Draw text
+    x_text = x0 + pad_x
+    y = y0 + pad_t + line_h
+    for ln in lines:
+        cv2.putText(img, ln, (x_text, int(y)), font, font_scale, text_color, thickness, cv2.LINE_AA)
+        y += int(line_h * line_gap)
+
+    metrics = {
+        "x_left": x_text,
+        "line_h": line_h,
+        "font_scale": font_scale,
+        "thickness": thickness,
+        "panel_right": x0 + panel_w,
+        "panel_bottom": y0 + panel_h,
+    }
+    return (y0, y0 + panel_h), metrics
+
+
+def draw_menu_banner(img, items, frame_idx, total_frames, thickness=2, top=True, alpha=0.35):
+    """
+    Draw a responsive banner:
+      • menu items (wrapped, with exactly 3 spaces between items)
+      • a counter line BELOW the menu (alone in its own line)
+    """
+    h, w = img.shape[:2]
+    margin_x = max(10, int(0.02 * w))
+    margin_y = max(8,  int(0.015 * h))
+    font      = cv2.FONT_HERSHEY_SIMPLEX
+    font_base = 0.8
+    font_scale = max(0.6, min(1.4, font_base * (w / 1280.0)))
+    line_gap   = configs.LINE_GAP
+
+    # --- wrap by items (keep exactly 3 spaces between items)
+    sep = "   "
+    lines, line = [], ""
+    max_width = w - 2 * margin_x
+    for item in items:
+        trial = line + (sep if line else "") + item
+        (tw, _), _ = cv2.getTextSize(trial, font, font_scale, thickness)
+        if tw <= max_width or not line:
+            line = trial
+        else:
+            lines.append(line)
+            line = item
+    if line:
+        lines.append(line)
+
+    # --- metrics
+    (_, th), _ = cv2.getTextSize("Ag", font, font_scale, thickness)
+    line_h   = int(th * 1.2)
+    menu_h   = int(len(lines) * line_h * line_gap)
+    counter_text = f"Frame Tracker: {frame_idx}/{max(1, total_frames-1)}"   # keep your old convention
+    counter_h    = line_h                                    # same line height
+
+    # total banner height = margins + menu lines + counter line
+    banner_h = int(2 * margin_y + menu_h + counter_h)
+
+    # --- translucent panel
+    y0 = 0 if top else h - banner_h
+    draw_translucent_panel(img, 0, y0, w, banner_h, color=configs.COLORS['panel_color'], alpha=alpha)
+
+    # --- draw menu lines
+    y = y0 + margin_y + line_h
+    for ln in lines:
+        cv2.putText(img, ln, (margin_x, int(y)),
+                    font, font_scale, configs.COLORS['menu_class'], thickness, cv2.LINE_AA)
+        y += int(line_h * line_gap)
+
+    # --- draw counter on its own line (below menu)
+    cv2.putText(img, counter_text, (margin_x, int(y)),
+                font, font_scale, configs.COLORS['menu_class'], thickness, cv2.LINE_AA)
+
+    return y0, y0 + banner_h
+
+
+def draw_translucent_panel(img, x, y, w, h, color=(40,40,40), alpha=0.35):
+    """Draw a semi-transparent rectangle over (x,y,w,h)."""
+    overlay = img.copy()
+    cv2.rectangle(overlay, (x, y), (x+w, y+h), color, -1)
+    cv2.addWeighted(overlay, alpha, img, 1-alpha, 0, dst=img)
+
+
+def build_classes_list(img, init_class, banner_bounds=None,
+                       margin_x=None, pad_y=10):
+    mapping = configs.OBJECT_CLASSES[init_class]
+    color   = configs.OBJECT_COLORS[init_class]
+
+    H, W = img.shape[:2]
+    if margin_x is None:
+        margin_x = max(10, int(0.02 * W))
+
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    fscale   = max(0.7, min(1.4, 0.9 * (W / 1280.0)))
+    thick    = 2
+    line_gap = configs.LINE_GAP
+
+    start_y = (banner_bounds[1] if banner_bounds else 0) + pad_y
+    title   = f"Category (press [n] to change):   {init_class}"
+    lines   = [title] + [f"[{cid}] {cname}" for cid, cname in mapping.items()]
+
+    # Measure
+    max_w, line_h = 0, 0
+    for ln in lines:
+        (tw, th), _ = cv2.getTextSize(ln, font, fscale, thick)
+        max_w = max(max_w, tw)
+        line_h = max(line_h, int(th * 1.2))
+
+    pad_x, pad_t = 12, 10
+    panel_w = min(W - 2*margin_x, max_w + 2*pad_x)
+    panel_h = int(pad_t + len(lines) * line_h * line_gap + pad_t)
+
+    # Panel
+    draw_translucent_panel(img, margin_x, start_y, panel_w, panel_h, color=configs.COLORS['classes_background'], alpha=0.35)
+
+    # Draw text
+    y = start_y + pad_t + line_h
+    x_left = margin_x + pad_x
+    for i, ln in enumerate(lines):
+        if i == 0:
+            cv2.putText(img, ln, (margin_x, int(y)),
+                        font, fscale, color, thick, cv2.LINE_AA)
+        else:
+            cv2.putText(img, ln, (x_left, int(y)),
+                        font, fscale, color, thick, cv2.LINE_AA)
+        y += int(line_h * line_gap)
+
+    # Metrics for precise placement later
+    metrics = {
+        "x_left": margin_x,
+        "y_title": y + pad_t + line_h,                   # baseline of title
+        "y_first_item": start_y + pad_t + line_h + int(line_h * line_gap),
+        "line_h": line_h, "font_scale": fscale, "thickness": thick
+    }
+    return (start_y, start_y + panel_h), img, mapping, metrics
+
+
+def ask_class(img, max_id, prompt_win=None, panel_metrics=None,
+              color=(0,255,255)):
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    typed = ""
+
+    # Place hint ABOVE the title line (inside panel top padding)
+    if panel_metrics:
+        x = panel_metrics["x_left"]
+        lh = panel_metrics["line_h"]
+        y = panel_metrics["y_title"] - int(0.35 * lh)   # safely above title
+        fscale   = panel_metrics["font_scale"]
+        thick    = panel_metrics["thickness"]
+    else:
+        # fallback
+        h, w = img.shape[:2]
+        x = max(10, int(0.02*w)); y = 120
+        fscale = max(0.7, min(1.4, 0.9 * (w/1280.0)))
+        thick  = 2
+
+    while True:
+        if prompt_win is not None:
+            vis = img.copy()
+            cv2.putText(vis, f"Class id: {typed or '_'}", (x, int(y)),
+                        font, fscale, color, thick, cv2.LINE_AA)
+            cv2.imshow(prompt_win, vis)
+
+        key = cv2.waitKey(0) & 0xFF
+        if key in (13, 32):                 # Enter/Space
+            if typed:
+                cid = int(typed)
+                if 0 <= cid < max_id:
+                    return cid
+                else:
+                    print('   [!] OUT OF BOUNDRIES - select different class')
+                    typed = ""
+            typed = ""
+            continue
+        if key in (27, ord('q')):           # Esc
+            return -1
+        if key in (ord('n'), ord('N')):     # change group
+            return -10
+        if key in (8, 127):                 # backspace/delete
+            typed = typed[:-1]
+        elif ord('0') <= key <= ord('9'):
+            typed += chr(key)
+
 
 def safe_draw_polygons(img, polygons, color, alpha=0.4):
     """
@@ -60,8 +285,7 @@ def safe_draw_polygons(img, polygons, color, alpha=0.4):
             _draw_single(poly)
 
     cv2.addWeighted(overlay, alpha, img, 1-alpha, 0, dst=img)
-
-    
+  
 
 def visualize_bbs_from_db(tool_bbs, frame_paths, frame_names, diff):
     #### Visualize for testing::
@@ -336,74 +560,6 @@ def draw_bb(out_mask, include_bb=True, shape=None):
         return bb_coco, bb_yolo, segs
     return out_mask, None, None
 
-
-def ask_class(img, max_id, prompt_win=None, x_offset=20):
-    """
-    Repeatedly reads keystrokes in a cv2 window until the user presses
-    Enter/Space, then returns the integer class-id.
-    - Digits 0-9 can be typed in sequence to form multi-digit numbers (10, 11…).
-    - Esc returns -1  (user abort).
-    """
-    typed = ""                       # buffer for digits
-
-    while True:
-        key = cv2.waitKey(0) & 0xFF
-
-        # ---------- finish input -------------------------------------
-        if key in (13, 32):          # Enter or Space
-            if typed == "":
-                continue             # nothing entered yet
-            cid = int(typed)
-            if 0 <= cid < max_id:
-                return cid
-            typed = ""               # reset on invalid id
-            print(" [!!] invalid id, try again")
-            continue
-
-        # ---------- abort --------------------------------------------
-        if key in (27, ord('q')):    # Esc or 'q'
-            return -1
-
-        if key in (ord('n'), ord('N')):
-            return -10
-
-        # ---------- accumulate digits --------------------------------
-        if ord('0') <= key <= ord('9'):
-            typed += chr(key)
-            if prompt_win is not None:
-                # Optional: show the partial number on the image
-                vis = img.copy()
-                cv2.putText(vis, f"Class id: {typed}",
-                            (x_offset, 145), cv2.FONT_HERSHEY_SIMPLEX,
-                            1.2, (0, 0, 255), 2, cv2.LINE_AA)
-                cv2.imshow(prompt_win, vis)
-
-
-
-def build_classes_list(image_with_classes, init_class):
-    """ 
-    Build a list of classes and display it on the image.
-    """
-    mapping_id_names = configs.OBJECT_CLASSES[init_class]
-    cv2.putText(image_with_classes, f"Category (press [n] to change):   {init_class}", (configs.x_offset, 110), cv2.FONT_HERSHEY_SIMPLEX,
-            0.95, configs.OBJECT_COLORS[init_class], 2, cv2.LINE_AA)
-    y_offset = 185
-    class_instr_lines = []
-    class_instr = ""
-    for cid, cname in mapping_id_names.items():
-        class_instr += f"[{cid}] {cname}   "
-        # if cid % 3 == 2:
-        class_instr_lines.append(class_instr.strip())
-        class_instr = ""
-    if class_instr:
-        class_instr_lines.append(class_instr.strip())
-    
-    for line in class_instr_lines:
-        cv2.putText(image_with_classes, line, (configs.x_offset, y_offset),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1.2, configs.OBJECT_COLORS[init_class], 2, cv2.LINE_AA)
-        y_offset += 50
-    
-    return image_with_classes, mapping_id_names
 #########################################################
 #          Coco Annotations Functionallity              #
 #########################################################
@@ -649,7 +805,7 @@ def video_to_frames(video_path, output_path):
 
     # Build the ffmpeg command
     command = [
-        ffmpeg_path,
+        "ffmpeg",
         "-loglevel", "error",  # Suppress all non-error messages
         "-i", video_path,  # Input video file
         "-q:v", "2",  # Set output quality; lower is better (range is roughly 2–31)
@@ -687,8 +843,8 @@ def video_to_frames_slow(video_path, output_path):
         # if frame_idx % 3 == 0:
         cv2.imwrite(filename, frame)
         frame_idx += 1
-        # if frame_idx % 10 == 0:  # TO DELETE!
-        #     break
+        if frame_idx % 35 == 0:  # TO DELETE!
+            break
         pbar.update(1)
         success, frame = cap.read()
 

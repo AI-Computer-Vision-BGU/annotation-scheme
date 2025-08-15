@@ -49,6 +49,8 @@ device_to_id_mapping = {
     3: "Washer",
     4: "Dryer",
     5: "Refrigerator",
+    6: "scaffold board",
+    7: "vibratory plate",
 }
 
 OBJECT_CLASSES = {
@@ -59,13 +61,14 @@ OBJECT_CLASSES = {
 
 # ---------------------------------------- UI Setup
 COLORS = {
-    "menu_class"  : (0, 255, 128),   
+    "menu_class"  : (255, 240, 191),   
     "tool_point"  : (255, 255, 0),   # cyan
     "hand_point"  : (255,   0, 255), # magenta
     "exclude"     : (0,   0, 255),   # red
     "cross_line"  : (255, 0,   0),
-    "menu_bar"    : ()
+    "panel_color" : (40,40,40),
+    "classes_background": (10, 10,  10),  # dark gray
 }
-
+LINE_GAP = 1.5
 x_offset = 20
 winnsize = (1280, 720)  # width, height
