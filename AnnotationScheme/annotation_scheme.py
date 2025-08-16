@@ -238,8 +238,8 @@ def run_preview(args, preview_path, annotation_results, new_shape=(640, 360), mi
                             frame_info['to_save_image'])
 
 
-    img_id = len(args.annotations['images'])
-    ann_id = len(args.annotations['annotations'])
+    img_id = args.annotations['images'][-1]['id'] + 1 if args.annotations['images'] else 0
+    ann_id = args.annotations['annotations'][-1]['id'] + 1 if args.annotations['annotations'] else 0
     frame_idx = 0
     total_frames = len(os.listdir(os.path.join(preview_path, 'frames')))
     winname = f'Preview - {os.path.split(preview_path)[-1]}'#  winname here so the window does not close and open after each frame..
@@ -380,6 +380,7 @@ def run_preview(args, preview_path, annotation_results, new_shape=(640, 360), mi
             if missing_class_name:
                 continue
             else:
+                im_saved = False
                 for obj_name in annotation_results.keys():
                     if obj_name in configs.OBJECT_WITH_BB:
                         # check if have annotations
@@ -407,8 +408,8 @@ def run_preview(args, preview_path, annotation_results, new_shape=(640, 360), mi
                             if frame_info['to_save_image'] is None:
                                 frame_info['to_save_image'] = cv2.resize(to_save_image, dsize=new_shape, interpolation=cv2.INTER_LINEAR)
                                 frame_info['img_info'] = img_info
-                                img_id += 1
                                 video_stack.append(frame_info)  # add the frame info to the stack
+                                im_saved = True
                             
                             print(f"   [+] {obj_name} bb saved for frame {frame_idx}")
 
@@ -433,11 +434,14 @@ def run_preview(args, preview_path, annotation_results, new_shape=(640, 360), mi
                                     "width": new_shape[0],
                                     "height": new_shape[1]
                                 }
-                                img_id += 1
                                 video_stack.append(frame_info)
+                                im_saved = True
                             
                             print(f"   [+] {obj_name} segmentation saved for frame {frame_idx}")
-                            
+
+                if im_saved:
+                    img_id += 1
+
                 if save_vis:
                     cv2.imwrite(os.path.join(preview_path, 'vis', frame_name), vis_image)
                 # if img_saved:
@@ -889,11 +893,9 @@ def annotate_video_using_sam(args,
     if preview_before_save:
         run_preview(args, sub_root_saved_path, annotation_results, save_vis=args.save_visualization)
 
-    if args.save_visualization:
-        utils.reset_working_dir(frame_paths, delete_=True)
-        utils.reset_working_dir(current_working_file, delete_=True)
-    else:    
-        utils.reset_working_dir(sub_root_saved_path, delete_=True)
+    
+    utils.reset_working_dir(frame_paths, delete_=True)
+    utils.reset_working_dir(current_working_file, delete_=True)  
     # utils.reset_working_dir(frame_paths, delete_=True)
 
 
@@ -1082,13 +1084,15 @@ def annotator(args, fixer=False):
     elif args.directory_path:
         tool_categories = [tool_cat for tool_cat in os.listdir(args.directory_path) if '.DS_' not in tool_cat ]#and tool_cat in configs.CATEGORIES]
         for tool_category in tool_categories:
-            if tool_category not in configs.TOOL_CATEGORIEES:
-                print(f' > Skipping {tool_category} as it is not in the supported categories')
-                continue
+            # if tool_category not in ['Hammering']:
+            #     print(f' > Skipping {tool_category} as it is not in the supported categories')
+            #     continue
             print(f'Annotating {tool_category} videos')
             args.curr_tool_id = args.category_id_mapping[tool_category] if tool_category in args.category_id_mapping else -1
             videos = [vid for vid in os.listdir(os.path.join(args.directory_path, tool_category)) if vid.endswith(('.mp4', '.MP4', '.mov'))]
             for stam_idx, video in enumerate(videos):
+                # if stam_idx < 100:
+                #     continue
                 video_path = os.path.join(args.directory_path, tool_category, video)
                 args.video_path = video_path
                 vid_name = os.path.split(video_path)[-1].split('.')[0]
@@ -1099,11 +1103,13 @@ def annotator(args, fixer=False):
                 curr_tool_output_path = os.path.join(args.output_dir, vid_name)
                 os.makedirs(curr_tool_output_path, exist_ok=True)
 
-                print(f' > Annotating {vid_name}')
+                print(f' > Annotating {vid_name} --- {stam_idx}/{len(videos)}')
                 if args.manually:
                     tool_bbs, hands_segmentations = annotate_all_video_manually(args.video_path, curr_tool_output_path)
                 else:
                     annotate_video_using_sam(args, curr_tool_output_path, preview_before_save=True)
+
+                
 
     elif args.fixer:  # Fix annotations
         # Fix the annotations
@@ -1181,7 +1187,7 @@ def ask_user_for_run_config():
             for super_category, mapping_ in configs.OBJECT_CLASSES.items():
                 for _, obj in mapping_.items():
                     categories.append({
-                        "id": f"{obj_id}",
+                        "id": {obj_id},
                         "name": f"{obj}",
                         "supercategory": f"{super_category}"
                     })
@@ -1196,6 +1202,8 @@ def ask_user_for_run_config():
         else:  
             with open(os.path.join(args.coco_data, 'annotations.json'), 'r') as f:
                 args.annotations = json.load(f)
+            
+            print(args.annotations['categories'])
             # extract all names of video
             if os.path.exists(os.path.join(args.coco_data, "done_video_names.pkl")):
                 args._progress_state = utils.save_open_video_names_as_pickles(None, path=os.path.join(args.coco_data, "done_video_names.pkl"), op='open')
