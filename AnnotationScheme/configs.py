@@ -25,43 +25,12 @@ OBJECT_TO_ANNOTATE_REVERSED = {v: k for k, v in OBJECT_TO_ANNOTATE.items()}  # r
 OBJECT_WITH_BB = ['TOOL', 'DEVICE']                          # objects that need bounding box
 TOOL_CATEGORIES = ['Hammer', 'Cut', 'Screw', 'Piping', 'Measure']
 NONE_TOOL_CATEGORIES = ['Attach', 'Click', 'Cover', 'OpenClose', 'Plug']
-category_id_to_name = {
-                        0: "SL",
-                        1: "adjustable spanner",
-                        2: "allen",
-                        3: "drill",
-                        4: "hammer",
-                        5: "plier",
-                        6: "ratchet",
-                        7: "screwdriver",
-                        8: "tapemeasure",
-                        9: "wrench",
-                        10: "hands",
-                        11: "saw",
-                        12: "elctric screwdriver",
-                        13: "blade",
-                        14: "None",
-    }
-
-device_to_id_mapping = {
-    0: "PC",
-    1: "Laptop",
-    2: "Tablet",
-    3: "Washer",
-    4: "Dryer",
-    5: "Refrigerator",
-    6: "scaffold board",
-    7: "vibratory plate",
-    8: "monitor",
-    9: "TV",
-    10: "Fan",
-    11: "None",
-}
-
+TOOLS_CLASSES = ["SL", "adjustable spanner", "allen", "drill", "hammer", "plier", "ratchet", "screwdriver", "tapemeasure", "wrench", "hands", "saw", "elctric screwdriver", "blade", "None"]
+DEVICE_CLASSES = ["PC", "Laptop", "Washer", "Dryer", "Refrigerator", "scaffold board", "vibratory plate", "monitor", "TV", "Fan", "Air intaker", "None"]
 OBJECT_CLASSES = {
-    'TOOL': category_id_to_name,
+    'TOOL': {id_: name for id_, name in enumerate(TOOLS_CLASSES)},
     'HAND': {},
-    'DEVICE': device_to_id_mapping,
+    'DEVICE': {id_: name for id_, name in enumerate(DEVICE_CLASSES)},
 }
 
 # ---------------------------------------- UI Setup
@@ -76,4 +45,4 @@ COLORS = {
 }
 LINE_GAP = 1.5
 x_offset = 20
-winnsize = (1280, 720)  # width, height
+winnsize = (1600, 900)  # width, height

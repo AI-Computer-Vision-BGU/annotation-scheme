@@ -61,6 +61,8 @@ parser.add_argument("--new_shape", nargs=2, type=int, metavar=("W", "H"),
 
 parser.add_argument("--repeat", type=int,
                         default=20, help="Resize frames before export")
+parser.add_argument("--pass_annotated", action='store_true',
+                        help="If set, the videos that are annotated (even partially) will be skipped")
 
 args_parser = parser.parse_args()
 
@@ -226,14 +228,23 @@ def run_preview(args, preview_path, annotation_results, new_shape=(640, 360), mi
     if save_vis:
         if not os.path.exists(os.path.join(preview_path, 'vis')):
             os.makedirs(os.path.join(preview_path, 'vis'))
-    images = []
-    annotations = []
-    img_id = len(os.listdir(os.path.join(args.coco_data, 'images')))
-    ann_id = len(annotations)
+    
+    def extend_annotations(v_stack):
+        for frame_info in v_stack:
+            if frame_info['to_save_image'] is not None:
+                args.annotations['images'].append(frame_info['img_info'])
+                args.annotations['annotations'].extend(frame_info['annotations'])
+                cv2.imwrite(os.path.join(args.coco_data, 'images', frame_info['img_info']['file_name']),
+                            frame_info['to_save_image'])
+
+
+    img_id = len(args.annotations['images'])
+    ann_id = len(args.annotations['annotations'])
     frame_idx = 0
     total_frames = len(os.listdir(os.path.join(preview_path, 'frames')))
     winname = f'Preview - {os.path.split(preview_path)[-1]}'#  winname here so the window does not close and open after each frame..
     
+    video_stack = []  # a stack data structure to keep track of the choosen frames
     while frame_idx < total_frames:
         orig_frame_path = os.path.join(preview_path, 'frames', f'{frame_idx:05d}.jpg')
         orig_frame_img = cv2.imread(orig_frame_path)
@@ -241,7 +252,10 @@ def run_preview(args, preview_path, annotation_results, new_shape=(640, 360), mi
         to_save_image = orig_frame_img.copy()
         orig_h, orig_w, _ = orig_frame_img.shape
         frame_name = f"{os.path.split(preview_path)[-1]}_{frame_idx:05d}.jpg"
-        img_saved = False
+        frame_info = {'frame_name': frame_name,
+                      'annotations': [],
+                      'to_save_image': None,
+                      'img_info': None}
 
         # -------------------------------------------------- check first if the frame is already annotated
         total_obj_annotated = 0
@@ -284,25 +298,23 @@ def run_preview(args, preview_path, annotation_results, new_shape=(640, 360), mi
         key = cv2.waitKey(0) & 0xFF  
         if key in (ord('q'), 27):         # --------- QUIT video -- all annotations saved
             cv2.destroyAllWindows()
-            args.annotations['images'].extend(images)
-            args.annotations['annotations'].extend(annotations)
-            utils.save_coco_annotations(args.annotations, os.path.join(args.coco_data, 'annotations.json'))
-            utils.save_open_video_names_as_pickles(args._progress_state, path=os.path.join(args.coco_data, 'done_video_names.pkl'), op='save')
+            extend_annotations(video_stack)
             return
         
         elif key in (ord('x'),):          # --------- EXIT the program NO ANNOTATIONS SAVED
             cv2.destroyAllWindows()
-            # mark frames as unannotated
-            for i in range(frame_idx, total_frames):
-                args._progress_state[args.vid_name][i] = False
+            extend_annotations(video_stack)
+            utils.save_coco_annotations(args.annotations, os.path.join(args.coco_data, 'annotations.json'))
             utils.save_open_video_names_as_pickles(args._progress_state, path=os.path.join(args.coco_data, 'done_video_names.pkl'), op='save')
             sys.exit()
         
-        elif key in (ord('p'),):          # --------- Previous frame
+        elif key in (ord('p'),):          # --------- Previous frame  (need to remove also the annotation from the list)
             frame_idx -= 1
             if frame_idx < 0:
                 frame_idx = 0
             args._progress_state[args.vid_name][frame_idx] = False
+            if len(video_stack):
+                video_stack.pop()  # remove the last frame info
             continue
 
         elif key in (ord('s'), ord('S')): # --------- Skip current frame
@@ -336,7 +348,7 @@ def run_preview(args, preview_path, annotation_results, new_shape=(640, 360), mi
             choose_category = 0
             init_class = configs.OBJECT_WITH_BB[(choose_category) % len(configs.OBJECT_WITH_BB)]
             while True:
-                panel_bound, image_with_classes, mapping_id_names, metrics = utils.build_classes_list(image_with_classes, init_class, banner_bounds=(y0, y1))
+                _, image_with_classes, mapping_id_names, metrics = utils.build_classes_list(image_with_classes, init_class, banner_bounds=(y0, y1))
                 cv2.imshow(winname, image_with_classes)
                 user_choice = utils.ask_class(image_with_classes, max_id=len(mapping_id_names), prompt_win=winname,
                                               panel_metrics=metrics, color=configs.OBJECT_COLORS[init_class])
@@ -346,25 +358,23 @@ def run_preview(args, preview_path, annotation_results, new_shape=(640, 360), mi
                     image_with_classes = image_with_object.copy()
                     continue
                 if user_choice == -1:  # User pressed Esc or 'q'
-                    print("   [!] No category selected. Exiting category selection.")
+                    print("     [!] No category selected. Exiting category selection.")
                     frame_idx -= 1  
                     break
                 if user_choice < 0 or user_choice >= len(mapping_id_names):
-                    print("   [!] Invalid class. Please select a valid category.")
+                    print("     [!] Invalid class. Please select a valid category.")
                     continue
                 else:
-                    print(f"   [*] Updated category of {init_class} to {mapping_id_names[user_choice]}")
+                    print(f"    [*] Updated category of {init_class} to {mapping_id_names[user_choice]}")
                     annotation_results[init_class]['bb']['class_name'] = mapping_id_names[user_choice].lower()
                     frame_idx -= 1 
                     break
 
         elif key in (ord('a'), 13, 32):   # ---------  Accept the current BB
             missing_class_name = False
-            img_indicator = False
             for obj in annotation_results.keys():
                 if annotation_results[obj]['bb']['class_name'] is None and obj in configs.OBJECT_WITH_BB:
                     print(f"   [!] No category selected for {obj}. ")
-                    # frame_idx -= 1  # Go back to the same frame
                     missing_class_name = True
                     # break
             if missing_class_name:
@@ -376,7 +386,7 @@ def run_preview(args, preview_path, annotation_results, new_shape=(640, 360), mi
                         if annotation_results[obj_name]['bb'] and f'{frame_idx}' in annotation_results[obj_name]['bb'] and annotation_results[obj_name]['bb'][f'{frame_idx}']:
                             _bb = utils.rescale_bbox_x1y1wh(annotation_results[obj_name]['bb'][f"{frame_idx}"][0], (orig_w, orig_h), new_shape)  # assuming always one bb in each frame..
                             category_id = args.category_mapping_name_to_id[annotation_results[obj_name]['bb']['class_name']] if annotation_results[obj_name]['bb']['class_name'] is not None else None
-                            annotations.append({
+                            obji_bb_seg = {
                                 "id": ann_id,
                                 "image_id": img_id,
                                 "category_id": category_id,  
@@ -384,25 +394,26 @@ def run_preview(args, preview_path, annotation_results, new_shape=(640, 360), mi
                                 "area": _bb[-1] * _bb[-2],
                                 "iscrowd": 0,
                                 "segmentation": utils.rescale_polygon(annotation_results[obj_name]['seg'][f'{frame_idx}'], (orig_w, orig_h), new_shape),
-                            })
+                            }
+                            frame_info['annotations'].append(obji_bb_seg)
                             ann_id += 1
                             args._progress_state[args.vid_name][frame_idx] = True
-                            if not img_saved:
-                                cv2.imwrite(os.path.join(args.coco_data, 'images', frame_name), cv2.resize(to_save_image, dsize=new_shape, interpolation=cv2.INTER_LINEAR))
-                                images.append({
-                                    "id": img_id,
-                                    "file_name": frame_name,
-                                    "width": new_shape[0],
-                                    "height": new_shape[1]
-                                })
-                                img_saved = True
+                            img_info = {
+                                "id": img_id,
+                                "file_name": frame_name,
+                                "width": new_shape[0],
+                                "height": new_shape[1]
+                            }
+                            if frame_info['to_save_image'] is None:
+                                frame_info['to_save_image'] = cv2.resize(to_save_image, dsize=new_shape, interpolation=cv2.INTER_LINEAR)
+                                frame_info['img_info'] = img_info
+                                img_id += 1
+                                video_stack.append(frame_info)  # add the frame info to the stack
                             
-                        else:
-                            print(f"   [-] {obj_name} annotation not found on frame {frame_idx}")
+                            print(f"   [+] {obj_name} bb saved for frame {frame_idx}")
 
-
-                    elif annotation_results[obj_name]['seg'] and f'{frame_idx}' in annotation_results[obj_name]['seg'] and annotation_results[obj_name]['seg'][f'{frame_idx}']:
-                            annotations.append({
+                    elif annotation_results[obj_name]['seg'] and f'{frame_idx}' in annotation_results[obj_name]['seg'] and annotation_results[obj_name]['seg'][f'{frame_idx}']:  # This for hands and any object without segmentatons (assuming always its id is 10)
+                            hand_seg = {
                                 "id": ann_id,
                                 "image_id": img_id,
                                 "category_id": 10,  # for hands -- CHANGE later  
@@ -410,28 +421,27 @@ def run_preview(args, preview_path, annotation_results, new_shape=(640, 360), mi
                                 "area": 0,
                                 "iscrowd": 0,
                                 "segmentation": utils.rescale_polygon(annotation_results[obj_name]['seg'][f'{frame_idx}'], (orig_w, orig_h), new_shape),
-                            })
+                            }
+                            frame_info['annotations'].append(hand_seg)
                             ann_id += 1
                             args._progress_state[args.vid_name][frame_idx] = True
-                            if not img_saved:
-                                cv2.imwrite(os.path.join(args.coco_data, 'images', frame_name), cv2.resize(to_save_image, dsize=new_shape, interpolation=cv2.INTER_LINEAR))
-                                images.append({
+                            if frame_info['to_save_image'] is None:
+                                frame_info['to_save_image'] = cv2.resize(to_save_image, dsize=new_shape, interpolation=cv2.INTER_LINEAR)
+                                frame_info['img_info'] = {
                                     "id": img_id,
                                     "file_name": frame_name,
                                     "width": new_shape[0],
                                     "height": new_shape[1]
-                                })
-                                img_saved = True
-
-                    else:
-                        # allow the user to see that this bb is indeed -1
-                            print(f"   [-] {obj_name} annotation not found on frame {frame_idx}")
-                            # frame_idx += 1
-                            # continue
+                                }
+                                img_id += 1
+                                video_stack.append(frame_info)
+                            
+                            print(f"   [+] {obj_name} segmentation saved for frame {frame_idx}")
+                            
                 if save_vis:
                     cv2.imwrite(os.path.join(preview_path, 'vis', frame_name), vis_image)
-                if img_saved:
-                    img_id += 1
+                # if img_saved:
+                #     img_id += 1
         
         elif key in (ord('h'),):          # ---------  Help
             help_text = ['Help Menu:',
@@ -441,7 +451,7 @@ def run_preview(args, preview_path, annotation_results, new_shape=(640, 360), mi
                          ' [s] Skip the current frame (annotation deleted)',
                          ' [p] Go to the previous frame',
                          ' [q] Quit the video annotation (save all annotations)',
-                         ' [x] Exit the program without saving annotations',
+                         ' [x] Exit the program save all annotations to file',
                          ' [h] Show this help menu'
             ]
             utils.draw_menu_panel(orig_frame_img, help_text, start_xy=(y0, y1 + 100),
@@ -459,9 +469,6 @@ def run_preview(args, preview_path, annotation_results, new_shape=(640, 360), mi
             continue
         frame_idx += 1
 
-    if not images and not annotations:
-        cv2.destroyAllWindows()
-        return
 
     # First, ask user if he want to discard annotations
     question_img = orig_frame_img.copy()
@@ -484,9 +491,10 @@ def run_preview(args, preview_path, annotation_results, new_shape=(640, 360), mi
         elif key in (ord('n'), ord('N')):
             # add them to annotations.json
             # utils.add_to_coco(args, images, annotations)
-            args.annotations['images'].extend(images)
-            args.annotations['annotations'].extend(annotations)
-            utils.save_coco_annotations(args.annotations, os.path.join(args.coco_data, 'annotations.json'))
+            extend_annotations(video_stack)
+            # args.annotations['images'].extend(images)
+            # args.annotations['annotations'].extend(annotations)
+            # utils.save_coco_annotations(args.annotations, os.path.join(args.coco_data, 'annotations.json'))
             cv2.destroyAllWindows()
             break
 
@@ -635,8 +643,7 @@ def locate_tool_from_frame(frame_image,
     if ask_user:
         # Add text to the frame
         question_img = frame_image.copy()
-        menu_list = [f'Annotating {indices[0]} - {indices[-1]}/{total_frames-1}',
-                     f'[N] Next Video        [X] Exit Program']
+        menu_list = [f'[N] Next Video        [X] Exit Program']
 
         utils.draw_menu_panel(question_img, menu_list,
                               start_xy=(10, 10),
@@ -659,7 +666,7 @@ def locate_tool_from_frame(frame_image,
 
         ask_user = False
 
-    frame_tracker_text = f'Frame Tracker: {indices[0]}/{total_frames-1}'
+    frame_tracker_text = f'Annotating {indices[0]} - {indices[-1]}/{total_frames-1}'
     add_manually_bb(frame_image, frame_tracker_text=frame_tracker_text)
     return ask_user, last_detected_frame
 
@@ -743,7 +750,7 @@ def annotate_all_video_manually(v_path, curr_tool_output_path=None,
         if start_point is not None and end_point is not None:
             tool_bbs[f'{sample_idx}'] = utils.convert_bb_to_yolo_format([*start_point, *end_point], width, height)
         else:
-            # skipping the frame
+            #   the frame
             if not utils.prompt_question(True, query="Are you sure?"):
                 print(f'DELETING THIS BB {sample_idx}')
                 tool_bbs[f'{sample_idx}'] = [-1, -1, -1, -1]
@@ -788,7 +795,7 @@ def annotate_video_using_sam(args,
     os.makedirs(frame_paths, exist_ok=True)
 
       # for now, pass the annotaTED VIDEOS (even if only 10 frames are annotated)
-    if args.vid_name in args._progress_state and args._progress_state[args.vid_name].count(True) > 0:
+    if args.vid_name in args._progress_state and args._progress_state[args.vid_name].count(True) > 0 and args_parser.pass_annotated:
         print(f'   [*] Skipping video {args.vid_name} as it has {args._progress_state[args.vid_name].count(True)}/{len(args._progress_state[args.vid_name])} annotated frames')
         # utils.reset_working_dir(sub_root_saved_path, delete_=True)
         return
@@ -828,8 +835,6 @@ def annotate_video_using_sam(args,
                 i += 1
                 continue
 
-          
-            
             # Prepare the current window of frames
             indices = utils.find_range(i, total_frames, bit_state=args._progress_state[args.vid_name], range_step=args.repeat)
             if debug:
@@ -863,11 +868,8 @@ def annotate_video_using_sam(args,
             print(f'   > SAM FOR : {indices[0]} - {indices[-1]}')
             cv2.waitKey(1)
             cv2.destroyAllWindows()
-            # cv2.waitKey(1)
-            curr_frame_names = utils.initial_working_dir(frame_paths, frame_names, current_working_file, indcies=indices)
+            utils.initial_working_dir(frame_paths, frame_names, current_working_file, indcies=indices)
             # update the state:
-            for idx in indices:
-                args._progress_state[args.vid_name][idx] = True
             video_segments = second_stage(sam_video_predictor, current_working_file, 0)
             video_segments = {k + i: v for k, v in video_segments.items()}
             combined_video_segments = {**combined_video_segments, **video_segments}
@@ -1080,12 +1082,13 @@ def annotator(args, fixer=False):
     elif args.directory_path:
         tool_categories = [tool_cat for tool_cat in os.listdir(args.directory_path) if '.DS_' not in tool_cat ]#and tool_cat in configs.CATEGORIES]
         for tool_category in tool_categories:
-            # if tool_category not in ["Hammering"]:
-            #     continue
+            if tool_category not in configs.TOOL_CATEGORIEES:
+                print(f' > Skipping {tool_category} as it is not in the supported categories')
+                continue
             print(f'Annotating {tool_category} videos')
             args.curr_tool_id = args.category_id_mapping[tool_category] if tool_category in args.category_id_mapping else -1
             videos = [vid for vid in os.listdir(os.path.join(args.directory_path, tool_category)) if vid.endswith(('.mp4', '.MP4', '.mov'))]
-            for video in videos:
+            for stam_idx, video in enumerate(videos):
                 video_path = os.path.join(args.directory_path, tool_category, video)
                 args.video_path = video_path
                 vid_name = os.path.split(video_path)[-1].split('.')[0]
@@ -1178,9 +1181,9 @@ def ask_user_for_run_config():
             for super_category, mapping_ in configs.OBJECT_CLASSES.items():
                 for _, obj in mapping_.items():
                     categories.append({
-                        "id": obj_id,
-                        "name": obj,
-                        "supercategory": super_category
+                        "id": f"{obj_id}",
+                        "name": f"{obj}",
+                        "supercategory": f"{super_category}"
                     })
                     category_mapping_name_to_id[obj.lower()] = obj_id
                     obj_id += 1
@@ -1210,10 +1213,10 @@ def ask_user_for_run_config():
 
             args.category_mapping_name_to_id = {cat['name'].lower(): cat['id'] for cat in args.annotations['categories']}
 
-        # atexit.register(lambda: utils.save_open_video_names_as_pickles(args._progress_state, path=os.path.join(args.coco_data, 'done_video_names.pkl'), op='save'))
+        atexit.register(lambda: utils.save_coco_annotations(args.annotations, os.path.join(args.coco_data, 'annotations.json')))
+        atexit.register(lambda: utils.save_open_video_names_as_pickles(args._progress_state, path=os.path.join(args.coco_data, 'done_video_names.pkl'), op='save'))
         args.category_id_mapping = {cat['name'].lower(): cat['id'] for cat in args.annotations['categories']}
         args.id_category_mapping = {cat['id']: cat['name'].lower() for cat in args.annotations['categories']}
-        print(f' ------ {args._progress_state}')
     # ---------------------------------------------- Fixer
     elif mode == "3":
         args.fixer = True
@@ -1227,7 +1230,7 @@ def ask_user_for_run_config():
     print("\n--------------------------------------------------------------------")
     print("Arguments:")
     for k, v in vars(args).items():
-        if k not in ['annotations']:
+        if k not in ['annotations', 'category_mapping_name_to_id', 'category_id_mapping', 'id_category_mapping', '_progress_state']:
             print(f"  {k:20s}: {v}")
     print("--------------------------------------------------------------------\n")
     return args
