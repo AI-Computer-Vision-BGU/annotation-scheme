@@ -304,8 +304,8 @@ def run_preview(args, preview_path, annotation_results, new_shape=(640, 360), mi
         elif key in (ord('x'),):          # --------- EXIT the program NO ANNOTATIONS SAVED
             cv2.destroyAllWindows()
             extend_annotations(video_stack)
-            utils.save_coco_annotations(args.annotations, os.path.join(args.coco_data, 'annotations.json'))
-            utils.save_open_video_names_as_pickles(args._progress_state, path=os.path.join(args.coco_data, 'done_video_names.pkl'), op='save')
+            # utils.save_json_file(args.annotations, os.path.join(args.coco_data, 'annotations.json'))
+            # utils.save_open_video_names_as_pickles(args._progress_state, path=os.path.join(args.coco_data, 'done_video_names.pkl'), op='save')
             sys.exit()
         
         elif key in (ord('p'),):          # --------- Previous frame  (need to remove also the annotation from the list)
@@ -500,7 +500,7 @@ def run_preview(args, preview_path, annotation_results, new_shape=(640, 360), mi
             # args.annotations['annotations'].extend(annotations)
             # utils.save_coco_annotations(args.annotations, os.path.join(args.coco_data, 'annotations.json'))
             cv2.destroyAllWindows()
-            break
+            return len(video_stack)
 
     
 #########################################################
@@ -845,12 +845,15 @@ def annotate_video_using_sam(args,
                 print(f'   > Starting with {indices[0]} - {indices[-1]}/{len(indices)} frames from {len(frame_names)} frames')
 
             frame_image = cv2.imread(os.path.join(frame_paths, frame_names[i]))
-            ask_user, last_detected_frame = locate_tool_from_frame(frame_image,
-                                                                   last_detected_frame,
-                                                                   indices,
-                                                                   total_frames,
-                                                                   ask_user=ask_user,)
+            if frame_image is None:
+                print(f'   [!!] frame {frame_names[i]} not opening')
+                continue
 
+            ask_user, last_detected_frame = locate_tool_from_frame(frame_image,
+                                                                last_detected_frame,
+                                                                indices,
+                                                                total_frames,
+                                                                ask_user=ask_user,)
             if next_video:
                 cv2.destroyAllWindows()
                 return
@@ -891,12 +894,13 @@ def annotate_video_using_sam(args,
 
     # to ensure the correct annotation, run a preview and edit the one that needed to editted.
     if preview_before_save:
-        run_preview(args, sub_root_saved_path, annotation_results, save_vis=args.save_visualization)
+        total_annotated_frames = run_preview(args, sub_root_saved_path, annotation_results, save_vis=args.save_visualization)
 
     
     utils.reset_working_dir(frame_paths, delete_=True)
     utils.reset_working_dir(current_working_file, delete_=True)  
     # utils.reset_working_dir(frame_paths, delete_=True)
+    return total_annotated_frames
 
 
 def get_different_from_original(length_, k=100):
@@ -1055,7 +1059,7 @@ def fix_annotations(args, target_size=(640, 460)):
         new_coco["categories"] = coco["categories"]
         print(f"Fixed annotations saved to {args.output_path}")
         print(f"Last processed image ID: {args.tracker['coco_annotation_tracker_idx']}")
-        utils.save_coco_annotations(new_coco, args.output_path)
+        utils.save_json_file(new_coco, args.output_path)
 
 ################################################################################################################ End Fix COCO
 
@@ -1084,15 +1088,18 @@ def annotator(args, fixer=False):
     elif args.directory_path:
         tool_categories = [tool_cat for tool_cat in os.listdir(args.directory_path) if '.DS_' not in tool_cat ]#and tool_cat in configs.CATEGORIES]
         for tool_category in tool_categories:
-            # if tool_category not in ['Hammering']:
+            # if tool_category not in ['Screw']:
             #     print(f' > Skipping {tool_category} as it is not in the supported categories')
             #     continue
             print(f'Annotating {tool_category} videos')
             args.curr_tool_id = args.category_id_mapping[tool_category] if tool_category in args.category_id_mapping else -1
             videos = [vid for vid in os.listdir(os.path.join(args.directory_path, tool_category)) if vid.endswith(('.mp4', '.MP4', '.mov'))]
+            np.random.shuffle(videos)
+            
             for stam_idx, video in enumerate(videos):
                 # if stam_idx < 100:
                 #     continue
+                args.timer.start()
                 video_path = os.path.join(args.directory_path, tool_category, video)
                 args.video_path = video_path
                 vid_name = os.path.split(video_path)[-1].split('.')[0]
@@ -1107,8 +1114,13 @@ def annotator(args, fixer=False):
                 if args.manually:
                     tool_bbs, hands_segmentations = annotate_all_video_manually(args.video_path, curr_tool_output_path)
                 else:
-                    annotate_video_using_sam(args, curr_tool_output_path, preview_before_save=True)
+                    total_annotated_frames = annotate_video_using_sam(args, curr_tool_output_path, preview_before_save=True)
+                
+                args.timer.stop(total_frames=total_annotated_frames)
+                print(f' > Finished annotating {total_annotated_frames} frames of {vid_name} in {args.timer.format_time()}')
+                print('==========================================================')
 
+                # print(timer.get_timer_statistics())
                 
 
     elif args.fixer:  # Fix annotations
@@ -1152,7 +1164,7 @@ def ask_user_for_run_config():
         manually=False,
         repeat=args_parser.repeat,
         fixer=False,
-        tracker=None,
+        timer=utils.Timer(),
         coco_data=None,
         done_video_names=None,
         _progress_state={},
@@ -1187,7 +1199,7 @@ def ask_user_for_run_config():
             for super_category, mapping_ in configs.OBJECT_CLASSES.items():
                 for _, obj in mapping_.items():
                     categories.append({
-                        "id": {obj_id},
+                        "id": obj_id,
                         "name": f"{obj}",
                         "supercategory": f"{super_category}"
                     })
@@ -1203,7 +1215,10 @@ def ask_user_for_run_config():
             with open(os.path.join(args.coco_data, 'annotations.json'), 'r') as f:
                 args.annotations = json.load(f)
             
-            print(args.annotations['categories'])
+            if os.path.exists(os.path.join(args.coco_data, 'time_tracker.json')):
+                with open(os.path.join(args.coco_data, 'time_tracker.json'), 'r') as f:
+                    args.timer.set_timer_statistics(json.load(f))
+          
             # extract all names of video
             if os.path.exists(os.path.join(args.coco_data, "done_video_names.pkl")):
                 args._progress_state = utils.save_open_video_names_as_pickles(None, path=os.path.join(args.coco_data, "done_video_names.pkl"), op='open')
@@ -1221,7 +1236,8 @@ def ask_user_for_run_config():
 
             args.category_mapping_name_to_id = {cat['name'].lower(): cat['id'] for cat in args.annotations['categories']}
 
-        atexit.register(lambda: utils.save_coco_annotations(args.annotations, os.path.join(args.coco_data, 'annotations.json')))
+        atexit.register(lambda: utils.save_json_file(args.timer.timer_statistics, os.path.join(args.coco_data, 'time_tracker.json')))
+        atexit.register(lambda: utils.save_json_file(args.annotations, os.path.join(args.coco_data, 'annotations.json')))
         atexit.register(lambda: utils.save_open_video_names_as_pickles(args._progress_state, path=os.path.join(args.coco_data, 'done_video_names.pkl'), op='save'))
         args.category_id_mapping = {cat['name'].lower(): cat['id'] for cat in args.annotations['categories']}
         args.id_category_mapping = {cat['id']: cat['name'].lower() for cat in args.annotations['categories']}
@@ -1245,7 +1261,6 @@ def ask_user_for_run_config():
 
 
 if __name__ == "__main__":
-
     args = ask_user_for_run_config()
     annotator(args)
     if args.coco_data is not None:

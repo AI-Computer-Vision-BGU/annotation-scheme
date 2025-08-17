@@ -18,6 +18,7 @@ import pickle
 import re
 import bitarray
 import configs
+import time
 import imageio_ffmpeg
 ffmpeg_path = imageio_ffmpeg.get_ffmpeg_exe()
 
@@ -564,6 +565,63 @@ def draw_bb(out_mask, include_bb=True, shape=None):
         return bb_coco, bb_yolo, segs
     return [], [], []
 
+
+class Timer:
+    def __init__(self):
+        self.start_time = None
+        self.end_time = None
+        self.overall_time = None
+        self.running = False
+        self.timer_statistics = {}
+
+    def start(self):
+        """Start the timer."""
+        if not self.running:
+            self.start_time = time.time()
+            self.running = True
+        else:
+            print("Timer is already running.")
+
+    def stop(self, total_frames=0):
+        """Stop the timer and return elapsed time in seconds."""
+        if self.running:
+            self.end_time = time.time()
+            self.running = False
+            self.overall_time =  self.end_time - self.start_time
+
+            if total_frames not in self.timer_statistics:
+                self.timer_statistics[total_frames] = self.overall_time
+            else:
+                previous_time = self.timer_statistics[total_frames]
+                avg_time = (self.overall_time + previous_time) / 2
+                self.timer_statistics[total_frames] = avg_time
+            
+            self.start_time = None
+
+    def set_timer_statistics(self, old_statistics):
+        """
+        Set the timer statistics from an old statistics dictionary.
+        @param old_statistics: Dictionary with frame counts as keys and time taken as values.
+        """
+        self.timer_statistics = old_statistics
+
+    def format_time(self):
+        """Format seconds into minutes and seconds."""
+        if self.overall_time is None:
+            return "No time recorded"
+        minutes = int(self.overall_time // 60)
+        secs = int(self.overall_time % 60)
+        return f"{minutes} min {secs} sec"
+
+    def get_timer_statistics(self):
+        """Get the timer statistics."""
+        summary = {}
+        for frames, time_taken in self.timer_statistics.items():
+            minutes = int(time_taken // 60)
+            secs = int(time_taken % 60)
+            summary[frames] = f"{minutes} min {secs} sec"
+        return summary
+
 #########################################################
 #          Coco Annotations Functionallity              #
 #########################################################
@@ -598,7 +656,7 @@ def load_coco_annotations(json_path):
     return coco
 
 
-def save_coco_annotations(coco, json_path):
+def save_json_file(coco, json_path):
     with open(json_path, "w") as f:
         json.dump(coco, f, indent=2)
 
