@@ -151,7 +151,17 @@ def draw_translucent_panel(img, x, y, w, h, color=(40,40,40), alpha=0.35):
 
 
 def build_classes_list(img, init_class, banner_bounds=None,
-                       margin_x=None, pad_y=10):
+                       margin_x=None, pad_y=10,
+                       min_font=0.50,            # lower bound for readability
+                       min_gap=1.00):            # lower bound for line spacing
+    """
+    Draw a translucent panel containing:
+      - title: "Category (press [n] to change): <init_class>"
+      - one row per class
+      - reserved space for a 'Class id:' line below the list
+    The function automatically shrinks line_gap then font_scale until it fits.
+    Returns: (panel_top, panel_bottom), img, mapping, metrics
+    """
     mapping = configs.OBJECT_CLASSES[init_class]
     color   = configs.OBJECT_COLORS[init_class]
 
@@ -159,47 +169,69 @@ def build_classes_list(img, init_class, banner_bounds=None,
     if margin_x is None:
         margin_x = max(10, int(0.02 * W))
 
-    font = cv2.FONT_HERSHEY_SIMPLEX
-    fscale   = max(0.7, min(1.4, 0.9 * (W / 1280.0)))
+    font     = cv2.FONT_HERSHEY_SIMPLEX
+    fscale   = max(0.7, min(1.4, 0.9 * (W / 1280.0)))   # initial scale (responsive)
     thick    = 2
-    line_gap = configs.LINE_GAP
+    line_gap = float(getattr(configs, "LINE_GAP", 1.35))
 
     start_y = (banner_bounds[1] if banner_bounds else 0) + pad_y
     title   = f"Category (press [n] to change):   {init_class}"
     lines   = [title] + [f"[{cid}] {cname}" for cid, cname in mapping.items()]
 
-    # Measure
-    max_w, line_h = 0, 0
-    for ln in lines:
-        (tw, th), _ = cv2.getTextSize(ln, font, fscale, thick)
-        max_w = max(max_w, tw)
-        line_h = max(line_h, int(th * 1.2))
-
     pad_x, pad_t = 12, 10
-    panel_w = min(W - 2*margin_x, max_w + 2*pad_x)
-    panel_h = int(pad_t + len(lines) * line_h * line_gap + pad_t)
+    bottom_margin = 8
+    reserved_extra_lines = 2  # one blank + one "Class id:" line
 
-    # Panel
-    draw_translucent_panel(img, margin_x, start_y, panel_w, panel_h, color=configs.COLORS['classes_background'], alpha=0.35)
+    def measure(scale, gap):
+        max_w = 0
+        line_h = 0
+        for ln in lines:
+            (tw, th), _ = cv2.getTextSize(ln, font, scale, thick)
+            max_w = max(max_w, tw)
+            line_h = max(line_h, int(th * 1.2))
+        panel_w = min(W - 2 * margin_x, max_w + 2 * pad_x)
+        panel_h = int(pad_t + (len(lines) + reserved_extra_lines) * line_h * gap + pad_t)
+        return panel_w, panel_h, line_h
 
-    # Draw text
-    y = start_y + pad_t + line_h
-    x_left = margin_x + pad_x
-    for i, ln in enumerate(lines):
-        if i == 0:
-            cv2.putText(img, ln, (margin_x, int(y)),
-                        font, fscale, color, thick, cv2.LINE_AA)
+    # shrink until panel fits the available vertical space
+    avail_h = H - start_y - bottom_margin
+    panel_w, panel_h, line_h = measure(fscale, line_gap)
+    while panel_h > avail_h and (line_gap > min_gap or fscale > min_font):
+        if line_gap > min_gap:
+            line_gap = max(min_gap, line_gap - 0.05)
         else:
-            cv2.putText(img, ln, (x_left, int(y)),
-                        font, fscale, color, thick, cv2.LINE_AA)
+            fscale = max(min_font, fscale * 0.95)
+        panel_w, panel_h, line_h = measure(fscale, line_gap)
+
+    # cap to available height (safety)
+    panel_h = min(panel_h, avail_h)
+
+    # draw background panel full width or measured width
+    draw_translucent_panel(img, margin_x, start_y, panel_w, panel_h,
+                           color=configs.COLORS['classes_background'], alpha=0.35)
+
+    # draw text
+    y = start_y + pad_t + line_h
+    x_title = margin_x                    # title aligned with panel edge
+    x_items = margin_x + pad_x            # items slightly indented
+    for i, ln in enumerate(lines):
+        x = x_title if i == 0 else x_items
+        cv2.putText(img, ln, (x, int(y)),
+                    font, fscale, color, thick, cv2.LINE_AA)
         y += int(line_h * line_gap)
 
-    # Metrics for precise placement later
+    # where to draw "Class id:" → one blank line below the last item,
+    # but never beyond the panel bottom
+    y_after_list = y + int(line_h * line_gap)
+    class_prompt_y = min(start_y + panel_h - pad_t, y_after_list)
+
     metrics = {
-        "x_left": margin_x,
-        "y_title": y + pad_t + line_h,                   # baseline of title
-        "y_first_item": start_y + pad_t + line_h + int(line_h * line_gap),
-        "line_h": line_h, "font_scale": fscale, "thickness": thick
+        "x_left": x_items,
+        "y_title": y + pad_t + line_h,
+        "line_h": line_h,
+        "font_scale": fscale,
+        "thickness": thick,
+        "class_prompt_y": int(class_prompt_y)
     }
     return (start_y, start_y + panel_h), img, mapping, metrics
 
