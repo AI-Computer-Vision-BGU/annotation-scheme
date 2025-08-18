@@ -588,13 +588,13 @@ class Timer:
             self.end_time = time.time()
             self.running = False
             self.overall_time =  self.end_time - self.start_time
-
-            if total_frames not in self.timer_statistics:
-                self.timer_statistics[total_frames] = self.overall_time
-            else:
-                previous_time = self.timer_statistics[total_frames]
-                avg_time = (self.overall_time + previous_time) / 2
-                self.timer_statistics[total_frames] = avg_time
+            if int(total_frames) > 0:
+                if total_frames not in self.timer_statistics:
+                    self.timer_statistics[total_frames] = self.overall_time
+                else:
+                    previous_time = self.timer_statistics[total_frames]
+                    avg_time = (self.overall_time + previous_time) / 2
+                    self.timer_statistics[total_frames] = avg_time
             
             self.start_time = None
 

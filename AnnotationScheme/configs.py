@@ -25,8 +25,8 @@ OBJECT_TO_ANNOTATE_REVERSED = {v: k for k, v in OBJECT_TO_ANNOTATE.items()}  # r
 OBJECT_WITH_BB = ['TOOL', 'DEVICE']                          # objects that need bounding box
 TOOL_CATEGORIES = ['Hammer', 'Cut', 'Screw', 'Piping', 'Measure']
 NONE_TOOL_CATEGORIES = ['Attach', 'Click', 'Cover', 'OpenClose', 'Plug']
-TOOLS_CLASSES = ["SL", "adjustable spanner", "allen", "drill", "hammer", "plier", "ratchet", "screwdriver", "tapemeasure", "wrench", "hands", "saw", "elctric screwdriver", "blade", "None"]
-DEVICE_CLASSES = ["PC", "Laptop", "Washer", "Dryer", "Refrigerator", "scaffold board", "vibratory plate", "monitor", "TV", "Fan", "Air intaker", "Electronics", "Printer", "None"]
+TOOLS_CLASSES = ["SL", "adjustable spanner", "allen", "drill", "hammer", "plier", "ratchet", "screwdriver", "tapemeasure", "wrench", "hands", "saw", "elctric screwdriver", "blade", "scissor", "None"]
+DEVICE_CLASSES = ["PC", "Laptop", "Washer", "Dryer", "Refrigerator", "microwave", "scaffold board", "vibratory plate", "monitor", "TV", "Fan", "Air intaker", "Electronics", "Printer", "None"]
 OBJECT_CLASSES = {
     'TOOL': {id_: name for id_, name in enumerate(TOOLS_CLASSES)},
     'HAND': {},

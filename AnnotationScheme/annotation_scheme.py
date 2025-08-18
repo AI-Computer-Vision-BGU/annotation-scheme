@@ -390,7 +390,7 @@ def run_preview(args, preview_path, annotation_results, new_shape=(640, 360), mi
                             obji_bb_seg = {
                                 "id": ann_id,
                                 "image_id": img_id,
-                                "category_id": category_id,  
+                                "category_id": annotation_results[obj_name]['bb']['class_name'] if annotation_results[obj_name]['bb']['class_name'] is not None else "None",  # for hands -- CHANGE later
                                 "bbox":_bb,
                                 "area": _bb[-1] * _bb[-2],
                                 "iscrowd": 0,
@@ -1087,7 +1087,7 @@ def annotator(args, fixer=False):
 
     elif args.directory_path:
         tool_categories = [tool_cat for tool_cat in os.listdir(args.directory_path) if '.DS_' not in tool_cat ]#and tool_cat in configs.CATEGORIES]
-        for tool_category in tool_categories:
+        for tool_category in tool_categories[6:]:
             # if tool_category not in ['Screw']:
             #     print(f' > Skipping {tool_category} as it is not in the supported categories')
             #     continue
@@ -1116,7 +1116,7 @@ def annotator(args, fixer=False):
                 else:
                     total_annotated_frames = annotate_video_using_sam(args, curr_tool_output_path, preview_before_save=True)
                 
-                args.timer.stop(total_frames=total_annotated_frames)
+                args.timer.stop(total_frames=total_annotated_frames if total_annotated_frames is not None else 0)
                 print(f' > Finished annotating {total_annotated_frames} frames of {vid_name} in {args.timer.format_time()}')
                 print('==========================================================')
 
