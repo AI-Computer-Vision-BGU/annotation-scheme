@@ -198,6 +198,7 @@ def add_manually_bb(frame_image, frame_tracker_text=''):
             active_prompt = list(configs.OBJECT_TO_ANNOTATE.keys())[(object_idx + 1) % len(configs.OBJECT_TO_ANNOTATE)]
             previous_state = image_copy.copy()
             object_idx += 1
+            segment_by_points = True  # Points as default
         elif key == ord('d'):
             segment_by_points = not segment_by_points
         elif key in (ord('q'), 27):
@@ -384,7 +385,7 @@ def run_preview(args, preview_path, annotation_results, new_shape=(640, 360), mi
                 for obj_name in annotation_results.keys():
                     if obj_name in configs.OBJECT_WITH_BB:
                         # check if have annotations
-                        if annotation_results[obj_name]['bb'] and f'{frame_idx}' in annotation_results[obj_name]['bb'] and annotation_results[obj_name]['bb'][f'{frame_idx}']:
+                        if f'{frame_idx}' in annotation_results[obj_name]['bb'] and annotation_results[obj_name]['bb'][f'{frame_idx}']:
                             _bb = utils.rescale_bbox_x1y1wh(annotation_results[obj_name]['bb'][f"{frame_idx}"][0], (orig_w, orig_h), new_shape)  # assuming always one bb in each frame..
                             category_id = args.category_mapping_name_to_id[annotation_results[obj_name]['bb']['class_name']] if annotation_results[obj_name]['bb']['class_name'] is not None else None
                             obji_bb_seg = {
@@ -872,7 +873,7 @@ def annotate_video_using_sam(args,
                     for stream in object_segmentations[obj_id]:
                         print(f' > {stream}: {object_segmentations[obj_id][stream]}')
 
-            print(f'   > SAM FOR : {indices[0]} - {indices[-1]}')
+            print(f'   > SAM FOR : {indices[0]} - {indices[-1]} / {total_frames}')
             cv2.waitKey(1)
             cv2.destroyAllWindows()
             utils.initial_working_dir(frame_paths, frame_names, current_working_file, indcies=indices)
@@ -1078,16 +1079,16 @@ def annotator(args, fixer=False):
         curr_tool_output_path = os.path.join(args.output_dir, vid_name)
         os.makedirs(curr_tool_output_path, exist_ok=True)
         if args.manually:
-            tool_bbs, hands_segmentations = annotate_all_video_manually(args.video_path, curr_tool_output_path)
+            total_annotated_frames = annotate_all_video_manually(args.video_path, curr_tool_output_path)
         else:
-            tool_bbs, hands_segmentations = annotate_video_using_sam(args, curr_tool_output_path, preview_before_save=True)
+            total_annotated_frames = annotate_video_using_sam(args, curr_tool_output_path, preview_before_save=True)
 
         # print(f'tool_bbs: {tool_bbs}\n\nhand_segmentations: {hands_segmentations}')
 
 
     elif args.directory_path:
         tool_categories = [tool_cat for tool_cat in os.listdir(args.directory_path) if '.DS_' not in tool_cat ]#and tool_cat in configs.CATEGORIES]
-        for tool_category in tool_categories[6:]:
+        for tool_category in tool_categories[10:]:
             # if tool_category not in ['Screw']:
             #     print(f' > Skipping {tool_category} as it is not in the supported categories')
             #     continue
@@ -1112,7 +1113,7 @@ def annotator(args, fixer=False):
 
                 print(f' > Annotating {vid_name} --- {stam_idx}/{len(videos)}')
                 if args.manually:
-                    tool_bbs, hands_segmentations = annotate_all_video_manually(args.video_path, curr_tool_output_path)
+                    total_annotated_frames = annotate_all_video_manually(args.video_path, curr_tool_output_path)
                 else:
                     total_annotated_frames = annotate_video_using_sam(args, curr_tool_output_path, preview_before_save=True)
                 
