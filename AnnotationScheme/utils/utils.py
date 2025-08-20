@@ -374,9 +374,9 @@ def extract_annotations(success_indices,
                 out_obj_name = reversed_objects_to_annotate[out_obj_id]
                 if out_obj_name in configs.OBJECT_WITH_BB:     # With BB
                     bb_coco, bb_yolo, segs = draw_bb(out_mask, include_bb=True, shape=None)
-                    if format == 'coco':
+                    if format == 'coco' and bb_coco:
                         results[out_obj_name]['bb'][f'{out_frame_idx}'].append(bb_coco)
-                    elif format == 'yolo':
+                    elif format == 'yolo' and bb_yolo:
                         results[out_obj_name]['bb'][f'{out_frame_idx}'].append(bb_yolo)
                     results[out_obj_name]['seg'][f'{out_frame_idx}'] = segs
 

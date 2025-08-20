@@ -15,7 +15,7 @@ config_weights_mapping = {
 
 
 # ---------------------------------------- CHANGE based on the object one need to segment
-OBJECT_TO_ANNOTATE = {'TOOL': 10, 'HAND': 20, 'DEVICE': 30}  # object name and unique id
+OBJECT_TO_ANNOTATE = {'TOOL': 10, 'HAND': 20, 'DEVICE': 30}  # object name and unique id (by 10                      )
 OBJECT_COLORS = {
         'TOOL': (255, 255, 0),  # tool - blue
         'HAND': (255, 0, 255),  # hand - pink

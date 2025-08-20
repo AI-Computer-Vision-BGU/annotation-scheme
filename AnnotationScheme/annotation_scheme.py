@@ -76,6 +76,12 @@ yolo_failed = False
 segment_by_points = True
 active_prompt = configs.OBJECT_WITH_BB[0]
 object_segmentations = {}
+object_annotation_info = {
+        'include_points': [],
+        'exclude_points': [],
+        'start_point': None,
+        'end_point': None
+    }
 for obj in configs.OBJECT_TO_ANNOTATE.keys():
     object_segmentations[obj] = {
         'include_points': [],
@@ -92,6 +98,7 @@ previous_state = None  # to reset the image during dynamic drawing
 winname = f'{-1}'   # before starting...
 tracker_path = 'tracker.json' # track the database paths (add for each path if manually or yolo)
 cursor_pos = None            # (x, y) or None
+next_category = False
 
 
 #########################################################
@@ -151,7 +158,7 @@ def mouse_callback(event, x, y, flags, param):
 
 
 def add_manually_bb(frame_image, frame_tracker_text=''):
-    global winname, image_copy, clean_state, active_prompt, cursor_pos, segment_by_points, previous_state
+    global winname, image_copy, clean_state, active_prompt, cursor_pos, segment_by_points, previous_state, object_segmentations
     object_idx = 0
     object_colors = configs.OBJECT_COLORS.copy()
     # Ask user to choose hand or tool
@@ -200,6 +207,12 @@ def add_manually_bb(frame_image, frame_tracker_text=''):
             object_idx += 1
             segment_by_points = True  # Points as default
         elif key == ord('d'):
+            object_segmentations[active_prompt] = {
+                                                    'include_points': [],
+                                                    'exclude_points': [],
+                                                    'start_point': None,
+                                                    'end_point': None
+                                                    }
             segment_by_points = not segment_by_points
         elif key in (ord('q'), 27):
             reset_globals()
@@ -207,9 +220,10 @@ def add_manually_bb(frame_image, frame_tracker_text=''):
         
 
 def reset_globals():
-    global next_video, object_segmentations, segment_by_points
+    global next_video, object_segmentations, segment_by_points, next_category
     next_video = False
     segment_by_points = True
+    next_category = False
     for obj_id in object_segmentations.keys():
         for stream in object_segmentations[obj_id].keys():
             if 'inc' in stream or 'exc' in stream:
@@ -384,35 +398,36 @@ def run_preview(args, preview_path, annotation_results, new_shape=(640, 360), mi
                 im_saved = False
                 for obj_name in annotation_results.keys():
                     if obj_name in configs.OBJECT_WITH_BB:
-                        # check if have annotations
-                        if f'{frame_idx}' in annotation_results[obj_name]['bb'] and annotation_results[obj_name]['bb'][f'{frame_idx}']:
-                            _bb = utils.rescale_bbox_x1y1wh(annotation_results[obj_name]['bb'][f"{frame_idx}"][0], (orig_w, orig_h), new_shape)  # assuming always one bb in each frame..
-                            category_id = args.category_mapping_name_to_id[annotation_results[obj_name]['bb']['class_name']] if annotation_results[obj_name]['bb']['class_name'] is not None else None
-                            obji_bb_seg = {
-                                "id": ann_id,
-                                "image_id": img_id,
-                                "category_id": annotation_results[obj_name]['bb']['class_name'] if annotation_results[obj_name]['bb']['class_name'] is not None else "None",  # for hands -- CHANGE later
-                                "bbox":_bb,
-                                "area": _bb[-1] * _bb[-2],
-                                "iscrowd": 0,
-                                "segmentation": utils.rescale_polygon(annotation_results[obj_name]['seg'][f'{frame_idx}'], (orig_w, orig_h), new_shape),
-                            }
-                            frame_info['annotations'].append(obji_bb_seg)
-                            ann_id += 1
-                            args._progress_state[args.vid_name][frame_idx] = True
-                            img_info = {
-                                "id": img_id,
-                                "file_name": frame_name,
-                                "width": new_shape[0],
-                                "height": new_shape[1]
-                            }
-                            if frame_info['to_save_image'] is None:
-                                frame_info['to_save_image'] = cv2.resize(to_save_image, dsize=new_shape, interpolation=cv2.INTER_LINEAR)
-                                frame_info['img_info'] = img_info
-                                video_stack.append(frame_info)  # add the frame info to the stack
-                                im_saved = True
-                            
-                            print(f"   [+] {obj_name} bb saved for frame {frame_idx}")
+                        # check if have annotations        
+                        if annotation_results[obj_name]['bb'] and f'{frame_idx}' in annotation_results[obj_name]['bb']:
+                            if annotation_results[obj_name]['bb'][f'{frame_idx}']:
+                                _bb = utils.rescale_bbox_x1y1wh(annotation_results[obj_name]['bb'][f"{frame_idx}"][0], (orig_w, orig_h), new_shape)  # assuming always one bb in each frame..
+                                category_id = args.category_mapping_name_to_id[annotation_results[obj_name]['bb']['class_name']] if annotation_results[obj_name]['bb']['class_name'] is not None else None
+                                obji_bb_seg = {
+                                    "id": ann_id,              
+                                    "image_id": img_id,
+                                    "category_id": annotation_results[obj_name]['bb']['class_name'] if annotation_results[obj_name]['bb']['class_name'] is not None else "None",  # for hands -- CHANGE later
+                                    "bbox":_bb,
+                                    "area": _bb[-1] * _bb[-2],
+                                    "iscrowd": 0,
+                                    "segmentation": utils.rescale_polygon(annotation_results[obj_name]['seg'][f'{frame_idx}'], (orig_w, orig_h), new_shape), 
+                                }
+                                frame_info['annotations'].append(obji_bb_seg)
+                                ann_id += 1
+                                args._progress_state[args.vid_name][frame_idx] = True
+                                img_info = {
+                                    "id": img_id,
+                                    "file_name": frame_name,
+                                    "width": new_shape[0],
+                                    "height": new_shape[1]
+                                }
+                                if frame_info['to_save_image'] is None:
+                                    frame_info['to_save_image'] = cv2.resize(to_save_image, dsize=new_shape, interpolation=cv2.INTER_LINEAR)
+                                    frame_info['img_info'] = img_info
+                                    video_stack.append(frame_info)  # add the frame info to the stack
+                                    im_saved = True
+                                
+                                print(f"   [+] {obj_name} bb saved for frame {frame_idx}")
 
                     elif annotation_results[obj_name]['seg'] and f'{frame_idx}' in annotation_results[obj_name]['seg'] and annotation_results[obj_name]['seg'][f'{frame_idx}']:  # This for hands and any object without segmentatons (assuming always its id is 10)
                             hand_seg = {
@@ -644,11 +659,11 @@ def locate_tool_from_frame(frame_image,
     @param ask_user:
     @return:
     """
-    global winname, next_video, segment_by_points
+    global winname, next_video, segment_by_points, next_category
     if ask_user:
         # Add text to the frame
         question_img = frame_image.copy()
-        menu_list = [f'[N] Next Video        [X] Exit Program']
+        menu_list = [f'[a/Enter] Annotate    [C] Next Category    [N] Next Video    [X] Exit Program']
 
         utils.draw_menu_panel(question_img, menu_list,
                               start_xy=(10, 10),
@@ -666,6 +681,9 @@ def locate_tool_from_frame(frame_image,
             elif key in (ord('x'), ord('X')):
                 cv2.destroyAllWindows()
                 exit(0)  # Exit the program:
+            elif key in (ord('c'), ord('C')):
+                next_category = True
+                return False, -1
             else:
                 break
 
@@ -826,7 +844,7 @@ def annotate_video_using_sam(args,
     total_frames = len(frame_names)
     # ----- init progress state for this video
     args._progress_state[args.vid_name] = utils.ensure_bitset(args._progress_state, args.vid_name, total_frames)
-    winname = f'{args.vid_name} - # Unannotated Frames - {args._progress_state[args.vid_name].count(False)}/{total_frames}'
+    winname = f'{args.vid_name} ({args.category})- # Unannotated Frames - {args._progress_state[args.vid_name].count(False)}/{total_frames}'
     utils.place_window(winname, winnsize=configs.winnsize)  # Place the window at the top-left corner
     while i < total_frames - 1:
         # print(f' current: {i}   total: {total_frames}     {args._progress_state[args.vid_name]}')
@@ -858,6 +876,10 @@ def annotate_video_using_sam(args,
             if next_video:
                 cv2.destroyAllWindows()
                 return
+            
+            if next_category:
+                cv2.destroyAllWindows()
+                return 
 
             if utils.no_point_selected_by_user(object_segmentations):
                 skipped_frames[f'{i}'] = [[-1, -1, -1, -1]]
@@ -1070,7 +1092,7 @@ def annotator(args, fixer=False):
     :param args: user options
     :return:
     """
-    global segment_by_points
+    global segment_by_points, next_category
     tracker = utils.read_json(tracker_path)
     args.tracker = tracker
 
@@ -1088,7 +1110,8 @@ def annotator(args, fixer=False):
 
     elif args.directory_path:
         tool_categories = [tool_cat for tool_cat in os.listdir(args.directory_path) if '.DS_' not in tool_cat ]#and tool_cat in configs.CATEGORIES]
-        for tool_category in tool_categories[10:]:
+        np.random.shuffle(tool_categories)
+        for tool_category in tool_categories:
             # if tool_category not in ['Screw']:
             #     print(f' > Skipping {tool_category} as it is not in the supported categories')
             #     continue
@@ -1096,10 +1119,15 @@ def annotator(args, fixer=False):
             args.curr_tool_id = args.category_id_mapping[tool_category] if tool_category in args.category_id_mapping else -1
             videos = [vid for vid in os.listdir(os.path.join(args.directory_path, tool_category)) if vid.endswith(('.mp4', '.MP4', '.mov'))]
             np.random.shuffle(videos)
-            
+            args.category = tool_category
+
+            next_category = False
             for stam_idx, video in enumerate(videos):
                 # if stam_idx < 100:
                 #     continue
+                if next_category:
+                    args.timer.stop(None)
+                    break
                 args.timer.start()
                 video_path = os.path.join(args.directory_path, tool_category, video)
                 args.video_path = video_path

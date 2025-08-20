@@ -10,3 +10,4 @@ results_coco_format/images/
 results_coco_format/*.pkl
 __pycache__/
 *.py[cod]
+demo_data/**/*.MP4
